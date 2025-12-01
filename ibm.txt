@@ -1,0 +1,442 @@
+# Slide 1 — L’architecture fondatrice de l’IA générative
+
+### Le point de départ de la révolution
+
+**Le Transformer (2017)**
+*“Attention Is All You Need”*
+
+* Mécanisme d’auto-attention
+* Parallélisation massive
+* Entraînement à grande échelle
+* Modèles fondamentaux possibles
+
+✅ Le déclencheur technique de l’IA générative moderne
+
+---
+
+# Slide 2 — Pourquoi les Transformers atteignent leurs limites
+
+### Puissants, mais très coûteux
+
+* Complexité quadratique (O(N²))
+* Consommation énergétique élevée
+* Infrastructure lourde
+* Décisions difficiles à expliquer
+* Pas conçus initialement pour d’autres données que le texte
+
+⚠️ La montée en taille n’est pas durable indéfiniment
+
+---
+
+# Slide 3 — Les 3 moteurs de recherche mondiale
+
+### Ce qui guide l’évolution des architectures
+
+1. **Efficacité**
+   → Moins de calcul, moins d’énergie
+
+2. **Explicabilité**
+   → Comprendre les décisions du modèle
+
+3. **Multimodalité**
+   → Au-delà du texte et du code
+
+🎯 Les nouveaux modèles doivent être moins coûteux, plus intelligibles, plus universels
+
+---
+
+# Slide 4 — Architecture hybride d’IBM
+
+### Transformer + Modèles à espace d’état
+
+* Précision des Transformers
+* Performance des State Space Models
+* Modèles plus petits
+* Excellente gestion des contextes longs
+
+✅ Le meilleur des deux mondes
+
+---
+
+# Slide 5 — Energy Transformers
+
+### IA inspirée de la physique
+
+* Modèles basés sur les systèmes d’énergie minimale
+* Exécution très rapide
+* Coût énergétique réduit
+* Idéal pour l’analytique avancée
+
+✅ Observer la nature pour concevoir l’IA
+
+---
+
+# Slide 6 — Réseaux par fractions continues
+
+### Rupture radicale avec les neurones artificiels
+
+* Basés sur la théorie des nombres
+* Approximations mathématiques précises
+* Modèles plus interprétables
+* Raisonnement plus compréhensible
+
+🚀 Une nouvelle génération d’architectures en recherche
+
+---
+
+# Slide 7 — Conflit actuel : IA vs ingénierie logicielle
+
+### L’IA d’aujourd’hui viole les principes du logiciel
+
+* Prompts instables
+* Difficulté de test
+* Pas de modularité
+* Sécurité faible
+* Logique non déterministe
+
+❌ Un prompt n’est pas un programme
+
+---
+
+# Slide 8 — Vision IBM : le Generative Computing
+
+### Les modèles deviennent des objets logiciels
+
+* Programmables
+* Versionnables
+* Sécurisables
+* Testables
+* Adaptables
+
+✅ L’IA devient une infrastructure logicielle
+
+---
+
+# Slide 9 — Fonctions génératives
+
+### Modulariser l’intelligence
+
+* Fonctions spécifiques
+* Modules spécialisés
+* Activation dynamique
+* Adapters légers (LoRA)
+
+Exemples :
+
+* Voix
+* Vision
+* Raisonnement
+* Sécurité
+
+✅ Une intelligence composable
+
+---
+
+# Slide 10 — Programmer l’IA (pas la prompter)
+
+### Du texte… au code
+
+Au lieu de :
+
+> “Écris un bon prompt”
+
+On passe à :
+
+* Code vérifiable
+* Logique explicite
+* Flux contrôlés
+* Sécurité intégrée
+
+✅ L’IA comme machine programmable
+
+---
+
+# Slide 11 — Message clé
+
+### Le futur des modèles sera :
+
+* Efficace
+* Modulaire
+* Explicable
+* Multimodal
+* Programmable
+
+> Nous passons de
+> **Générative AI → Générative Computing**
+
+---
+
+Si tu veux, je peux maintenant :
+
+✅ Te générer un **PowerPoint / Google Slides**
+✅ Ajouter des visuels schématiques
+✅ Rédiger les **notes du présentateur**
+✅ Faire une version exécutive (3 slides)
+✅ Créer un résumé 1 page
+
+Dis-moi simplement le format final souhaité.
+
+
+
+------
+Voici une version **enrichie, fidèle à l’état d’esprit du speaker IBM**, avec **un niveau “conférence exécutive technique”**, des enjeux explicites et des exemples concrets.
+Tu peux les reprendre tels quels pour tes slides avec orateur + exemples parlants.
+
+---
+
+# Slide 7 — Le conflit fondamental : l’IA s’oppose au logiciel
+
+### 💥 Le diagnostic du speaker
+
+> “Aujourd’hui, l’IA moderne détruit 40 ans d’ingénierie logicielle.”
+
+---
+
+### ⚠️ Le problème
+
+Le développement logiciel repose historiquement sur :
+
+* modularité
+* encapsulation
+* testabilité
+* reproductibilité
+* sécurité
+* auditabilité
+* contrôle des versions
+
+Or l’IA moderne fonctionne avec :
+
+* des prompts géants
+* du comportement probabiliste
+* des réponses non déterministes
+* des modèles monolithiques
+* des failles de sécurité liées au langage naturel
+* des effets de bord imprévisibles
+
+---
+
+### ❌ Exemple concret : une application LLM moderne
+
+Aujourd’hui, beaucoup d’équipes livrent :
+
+```
+Agent.py
+  └── Prompt de 300 lignes
+        ├── instructions métier
+        ├── règles éthiques
+        ├── exemples
+        ├── exceptions
+        └── logique implicite
+```
+
+Résultat :
+
+| Problème                | Impact              |
+| ----------------------- | ------------------- |
+| un mot mal formulé      | bug comportemental  |
+| output non déterministe | impossible à tester |
+| prompt injecté          | faille sécurité     |
+| prompt trop long        | explosion des coûts |
+
+---
+
+### ✅ Message clé du speaker :
+
+> “Nous avons remplacé le code par du texte… et ce texte est devenu incontrôlable.”
+
+---
+
+# Slide 8 — Vision IBM : le modèle doit redevenir un objet logiciel
+
+### 🎯 Vision stratégique
+
+> L’IA ne doit plus être une boîte noire…
+>
+> Elle doit redevenir un **composant logiciel contrôlable**.
+
+---
+
+### ✅ Ce que veut IBM
+
+Passer de :
+
+| Aujourd’hui            | Demain                 |
+| ---------------------- | ---------------------- |
+| Prompt = programme     | Code = programme       |
+| modèle magique         | modèle programmable    |
+| comportement aléatoire | contrôle logique       |
+| correction empirique   | vérifiabilité formelle |
+| bricolage              | ingénierie             |
+
+---
+
+### ✅ Exemple souhaité
+
+Au lieu de :
+
+> "Explain the customer complaint carefully and generate answer"
+
+On veut :
+
+```python
+complaint = parse_document()
+category = classify(complaint)
+legal = apply_legal_policy(category)
+response = generate_reply(legal)
+```
+
+💡 Le modèle devient :
+
+* un moteur
+* un composant
+* une brique logicielle
+
+---
+
+# Slide 9 — Les Generative Functions : modulariser l’intelligence
+
+### 🧠 La révolution modulaire
+
+> Pourquoi entraîner un modèle géant pour tout ?
+
+IBM propose :
+
+> des micro-compétences IA branchables
+
+---
+
+### ✅ Concept clé : fonctions génératives
+
+Une compétence = une brique indépendante :
+
+| Fonction       | Rôle               |
+| -------------- | ------------------ |
+| Speech-to-Text | transcription      |
+| Vision         | analyse image      |
+| Reasoning      | raisonnement       |
+| Security       | filtrage           |
+| Tool-use       | interaction outils |
+
+---
+
+### ✅ Exemple réel
+
+Un chatbot sécurité :
+
+Au lieu de faire :
+
+> tout passer par un LLM
+
+IBM fait :
+
+```
+앱
+ ├── Fonction "detection risques"
+ ├── Fonction "analyse linguistique"
+ ├── Fonction "conformité RGPD"
+ └── Petit modèle central
+```
+
+---
+
+### 🎯 Bénéfices
+
+* réduction des coûts
+* meilleure robustesse
+* déploiement par fonctionnalité
+* gouvernance possible
+* adaptation rapide
+
+---
+
+# Slide 10 — Du prompting… au vrai développement logiciel
+
+### ❌ Problème du prompt engineering
+
+> C’est du bricolage :
+> ni testable, ni versionnable, ni sécurisable.
+
+---
+
+### ✅ Vision IBM : un langage de programmation pour l’IA
+
+Objectif :
+
+> Traiter les modèles comme des machines programmables
+
+---
+
+### ✅ Exemples
+
+Au lieu de :
+
+> "Think carefully and ensure compliance"
+
+On écrit :
+
+```python
+if is_sensitive(doc):
+    apply_masking()
+    forbid_generation()
+else:
+    summarize()
+```
+
+---
+
+### ✅ Résultat
+
+* Unit tests possibles
+* Sécurité paramétrable
+* audit facilité
+* rôle-based access
+* traçabilité
+
+---
+
+### ✅ Le modèle devient :
+
+> Une **infrastructure programmable**, pas un oracle probabiliste.
+
+---
+
+# Slide 11 — Le message stratégique final
+
+### 🚀 Ce que le speaker défend
+
+> La véritable révolution n’est PAS juste dans les modèles.
+>
+> Elle est dans la façon dont nous allons **les intégrer au logiciel**.
+
+---
+
+### ✅ Le futur des modèles :
+
+| Axe          | Évolution           |
+| ------------ | ------------------- |
+| Architecture | Hybride             |
+| Déploiement  | Modulaire           |
+| Sécurité     | Nativement intégrée |
+| Coût         | Maîtrisé            |
+| Organisation | Programmable        |
+| Audit        | Standard logiciel   |
+
+---
+
+### ✅ La phrase clé du talk :
+
+> “Le futur ne s’appelle pas Generative AI…
+>
+> Il s’appelle **Generative Computing**.”
+
+---
+
+Si tu veux, je peux maintenant :
+
+✅ produire une version PowerPoint prête à livrer
+✅ ajouter des diagrammes
+✅ écrire les notes orateur
+✅ produire une version exécutive
+✅ créer une slide d’impact de conclusion
+
+Dis-moi le format ou le niveau souhaité (grand public / comité exécutif / experts IA).
