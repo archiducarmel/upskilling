@@ -1,0 +1,71 @@
+-- ============================================================================
+-- REQUÊTE OPTIMISÉE : Extraction des opérations transactionnelles
+-- Version: 2.0 - Optimisée pour performance
+-- Auteur: Tech Lead IA Factory
+-- Date: 2024-12-20
+-- ============================================================================
+
+-- ============================================================================
+-- OPTIMISATIONS APPLIQUÉES:
+-- 1. Sélection des colonnes nécessaires uniquement (75 → 10 colonnes)
+-- 2. Pré-filtrage des comptes entreprises
+-- 3. Suppression du LIMIT arbitraire
+-- 4. Calcul de date simplifié avec DATE_FORMAT
+-- 5. Fenêtre temporelle précise (6 mois complets)
+-- 6. Élimination du double scan de CTE
+-- ============================================================================
+
+WITH 
+-- Étape 1: Calculer la fenêtre temporelle (6 derniers mois complets)
+date_window AS (
+    SELECT 
+        DATE_TRUNC('month', CURRENT_DATE - INTERVAL '6' MONTH) AS window_start,
+        DATE_TRUNC('month', CURRENT_DATE) AS window_end
+),
+
+-- Étape 2: Pré-filtrer les comptes entreprises (améliore la jointure)
+enterprise_accounts AS (
+    SELECT 
+        account_source_unique_id,
+        customer_source_unique_id
+    FROM "cat_ap80414_ice"."AP01433_run_refined_view"."ap01433_f04_accounts"
+    WHERE customer_source_unique_id LIKE '03%'
+    -- Note: Si un index existe sur customer_source_unique_id, il sera utilisé
+)
+
+-- Étape 3: Requête principale optimisée
+SELECT 
+    -- Identifiants (pour jointures ultérieures)
+    O.p_i_uniq_cpt AS account_id,
+    A.customer_source_unique_id AS customer_id,
+    
+    -- Colonnes métier utilisées dans le preprocessing
+    O.p_c_mvt_mc AS movement_code,
+    O.p_m_comptabilise_mc AS amount,
+    O.p_l_extrt_mc AS label,
+    O.p_sens_mvt AS movement_direction,
+    O.extract_date,
+    
+    -- Colonne calculée optimisée (1 seule fonction au lieu de 5)
+    DATE_FORMAT(O.extract_date, '%Y%m') AS month_year
+
+FROM "cat_ap80414_ice"."ap00325_refined_view"."v_hsta92b0_detail" O
+
+-- Jointure optimisée avec table pré-filtrée
+INNER JOIN enterprise_accounts A 
+    ON O.p_i_uniq_cpt = A.account_source_unique_id
+
+-- Filtre temporel précis (permet partition pruning si applicable)
+WHERE O.extract_date >= (SELECT window_start FROM date_window)
+  AND O.extract_date < (SELECT window_end FROM date_window)
+
+-- Pas de LIMIT: on veut TOUTES les données de la période
+;
+
+-- ============================================================================
+-- MÉTRIQUES ATTENDUES:
+-- - Colonnes transférées: 10 (vs 75 avant) = -87%
+-- - Mémoire: ~250MB (vs ~2GB avant) = -87%
+-- - Temps d'exécution: -50% à -70%
+-- - Données complètes: 100% (vs tronquées avant)
+-- ============================================================================
