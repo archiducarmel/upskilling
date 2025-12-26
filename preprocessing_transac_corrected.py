@@ -1,44 +1,26 @@
 import polars as pl
-from pathlib import Path
-
-# Fichier de debug
-DEBUG_FILE = Path("/mnt/code/debug_transac_full.txt")
-
-
-def write_debug(msg: str, df: pl.DataFrame = None, mode: str = "a") -> None:
-    """Écrit les infos de debug dans un fichier."""
-    with open(DEBUG_FILE, mode, encoding="utf-8") as f:
-        f.write(f"\n{'='*80}\n")
-        f.write(f"{msg}\n")
-        f.write(f"{'='*80}\n")
-        if df is not None:
-            f.write(f"Shape: {df.shape}\n")
-            f.write(f"Colonnes: {df.columns}\n")
-            f.write(f"Schema: {df.schema}\n")
-            f.write(f"\nSample (5 lignes):\n{df.head(5)}\n")
 
 
 def add_transac_features(df_main: pl.DataFrame, donnees_transac: pl.DataFrame) -> pl.DataFrame:
-    """Preprocess data for PDO prediction : encoding transaction features and add to df_main."""
+    """
+    Preprocess data for PDO prediction : encoding transaction features and add to df_main.
     
-    # Initialiser le fichier de debug
-    write_debug("=== DEBUT add_transac_features ===", mode="w")
+    VERSION CORRIGÉE : Sans unpivot/pivot pour éviter les bugs de certaines versions de Polars.
+    Approche manuelle avec des agrégations séparées par catégorie.
     
-    # =========================================================================
-    # STEP 0: Données d'entrée
-    # =========================================================================
-    write_debug("STEP 0: donnees_transac EN ENTREE", donnees_transac)
-    
-    with open(DEBUG_FILE, "a") as f:
-        f.write(f"\nTypes des colonnes numériques attendues:\n")
-        for col in ["netamount", "nops_category", "min_amount", "max_amount", "nops_total"]:
-            if col in donnees_transac.columns:
-                f.write(f"  {col}: {donnees_transac[col].dtype}\n")
-            else:
-                f.write(f"  {col}: COLONNE ABSENTE!\n")
+    Colonnes créées:
+        - interets__netamount, interets__nops, interets__min_amount, interets__max_amount
+        - turnover__netamount, turnover__nops, turnover__min_amount, turnover__max_amount  
+        - prlv_sepa_retourne__netamount, prlv_sepa_retourne__nops, prlv_sepa_retourne__min_amount, prlv_sepa_retourne__max_amount
+        - rembt_prlv_sepa__netamount, rembt_prlv_sepa__nops, rembt_prlv_sepa__min_amount, rembt_prlv_sepa__max_amount
+        - saisie__netamount, saisie__nops, saisie__min_amount, saisie__max_amount
+        - nops (total)
+        - remb_sepa_max, pres_prlv_retourne, pres_saisie, net_int_turnover (features métier)
+    """
     
     # =========================================================================
     # STEP 1: Cast des colonnes numériques à l'entrée
+    # Les données Starburst arrivent parfois en Decimal, il faut les convertir
     # =========================================================================
     numeric_cols_to_cast = {
         "netamount": pl.Float64,
@@ -53,16 +35,9 @@ def add_transac_features(df_main: pl.DataFrame, donnees_transac: pl.DataFrame) -
                 pl.col(col).cast(dtype, strict=False)
             )
     
-    write_debug("STEP 1: donnees_transac APRES CAST INITIAL", donnees_transac)
-    
-    with open(DEBUG_FILE, "a") as f:
-        f.write(f"\nTypes APRES cast:\n")
-        for col in ["netamount", "nops_category", "min_amount", "max_amount", "nops_total"]:
-            if col in donnees_transac.columns:
-                f.write(f"  {col}: {donnees_transac[col].dtype}\n")
-    
     # =========================================================================
-    # STEP 2: Aggregate categories
+    # STEP 2: Création de agg_category (regroupement de catégories)
+    # Note: saisie__ regroupe attri_blocage ET atd_tres_pub
     # =========================================================================
     donnees_transac = donnees_transac.with_columns(
         pl.when(pl.col("category") == "interets")
@@ -78,205 +53,84 @@ def add_transac_features(df_main: pl.DataFrame, donnees_transac: pl.DataFrame) -
         .otherwise(pl.col("category"))
         .alias("agg_category")
     )
-    
-    write_debug("STEP 2: donnees_transac APRES agg_category", donnees_transac)
-    
-    with open(DEBUG_FILE, "a") as f:
-        f.write(f"\nValeurs uniques de agg_category:\n")
-        f.write(f"{donnees_transac.select('agg_category').unique()}\n")
-    
+
     # =========================================================================
-    # STEP 3: Filter categories
+    # STEP 3: Filtrer uniquement les catégories utilisées par le modèle
     # =========================================================================
-    categories_to_keep = ["interets__", "turnover__", "prlv_sepa_retourne__", "rembt_prlv_sepa__", "saisie__"]
-    donnees_transac = donnees_transac.filter(pl.col("agg_category").is_in(categories_to_keep))
-    
-    write_debug("STEP 3: donnees_transac APRES FILTRE", donnees_transac)
-    
-    with open(DEBUG_FILE, "a") as f:
-        f.write(f"\nNombre de lignes après filtre: {donnees_transac.height}\n")
-        f.write(f"Valeurs uniques de agg_category après filtre:\n")
-        f.write(f"{donnees_transac.select('agg_category').unique()}\n")
-    
-    # =========================================================================
-    # STEP 4: Group by et agrégations
-    # =========================================================================
-    syn_donnees_transac = donnees_transac.group_by(["i_uniq_kpi", "agg_category"]).agg(
-        [
-            pl.col("netamount").sum().alias("netamount"),
-            pl.col("nops_category").sum().alias("nops"),
-            pl.col("min_amount").sum().alias("min_amount"),
-            pl.col("max_amount").sum().alias("max_amount"),
-        ]
+    categories_to_keep = [
+        "interets__", 
+        "turnover__", 
+        "prlv_sepa_retourne__", 
+        "rembt_prlv_sepa__", 
+        "saisie__"
+    ]
+    donnees_transac_filtered = donnees_transac.filter(
+        pl.col("agg_category").is_in(categories_to_keep)
     )
-    
-    write_debug("STEP 4: syn_donnees_transac APRES GROUP_BY", syn_donnees_transac)
-    
-    with open(DEBUG_FILE, "a") as f:
-        f.write(f"\nTypes après group_by:\n")
-        for col in syn_donnees_transac.columns:
-            f.write(f"  {col}: {syn_donnees_transac[col].dtype}\n")
-    
+
     # =========================================================================
-    # STEP 4b: df_nops
+    # STEP 4: Calculer nops (nombre total d'opérations) par i_uniq_kpi
     # =========================================================================
-    df_nops = donnees_transac.group_by(["i_uniq_kpi"]).agg(
-        [
-            pl.col("nops_total").sum().alias("nops"),
-        ]
+    df_nops = donnees_transac_filtered.group_by("i_uniq_kpi").agg(
+        pl.col("nops_total").sum().alias("nops")
     )
-    
-    write_debug("STEP 4b: df_nops", df_nops)
+
+    # =========================================================================
+    # STEP 5: Fonction d'agrégation par catégorie
+    # Reproduit exactement le comportement du code original:
+    # group_by([i_uniq_kpi, agg_category]).agg([sum(netamount), sum(nops_category), sum(min_amount), sum(max_amount)])
+    # =========================================================================
+    def aggregate_category(df: pl.DataFrame, category: str, prefix: str) -> pl.DataFrame:
+        """
+        Agrège les données pour une catégorie spécifique.
+        
+        Args:
+            df: DataFrame filtré contenant les transactions
+            category: Valeur de agg_category à filtrer (ex: "interets__")
+            prefix: Préfixe pour les noms de colonnes (ex: "interets__")
+        
+        Returns:
+            DataFrame avec colonnes: i_uniq_kpi, {prefix}netamount, {prefix}nops, {prefix}min_amount, {prefix}max_amount
+        """
+        return (
+            df.filter(pl.col("agg_category") == category)
+            .group_by("i_uniq_kpi")
+            .agg([
+                pl.col("netamount").sum().alias(f"{prefix}netamount"),
+                pl.col("nops_category").sum().alias(f"{prefix}nops"),
+                pl.col("min_amount").sum().alias(f"{prefix}min_amount"),
+                pl.col("max_amount").sum().alias(f"{prefix}max_amount"),
+            ])
+        )
     
     # =========================================================================
-    # STEP 5: Cast après group_by
+    # STEP 6: Agrégation pour chaque catégorie
     # =========================================================================
-    syn_donnees_transac = syn_donnees_transac.cast({
-        "netamount": pl.Float64,
-        "nops": pl.Float64,
-        "min_amount": pl.Float64,
-        "max_amount": pl.Float64,
-    })
-    
-    write_debug("STEP 5: syn_donnees_transac APRES CAST", syn_donnees_transac)
-    
-    with open(DEBUG_FILE, "a") as f:
-        f.write(f"\nTypes après cast explicite:\n")
-        for col in syn_donnees_transac.columns:
-            f.write(f"  {col}: {syn_donnees_transac[col].dtype}\n")
+    df_interets = aggregate_category(donnees_transac_filtered, "interets__", "interets__")
+    df_turnover = aggregate_category(donnees_transac_filtered, "turnover__", "turnover__")
+    df_prlv_retourne = aggregate_category(donnees_transac_filtered, "prlv_sepa_retourne__", "prlv_sepa_retourne__")
+    df_rembt_prlv = aggregate_category(donnees_transac_filtered, "rembt_prlv_sepa__", "rembt_prlv_sepa__")
+    df_saisie = aggregate_category(donnees_transac_filtered, "saisie__", "saisie__")
     
     # =========================================================================
-    # STEP 6: UNPIVOT - ÉTAPE CRITIQUE
+    # STEP 7: Jointure de toutes les catégories
+    # On part de la liste des i_uniq_kpi uniques pour s'assurer de ne perdre personne
+    # Les LEFT JOINs mettront NULL pour les catégories absentes (comportement identique au pivot)
     # =========================================================================
-    with open(DEBUG_FILE, "a") as f:
-        f.write(f"\n{'='*80}\n")
-        f.write("STEP 6: AVANT UNPIVOT\n")
-        f.write(f"Colonnes pour unpivot 'on': ['netamount', 'nops', 'min_amount', 'max_amount']\n")
-        f.write(f"Colonnes pour unpivot 'index': ['i_uniq_kpi', 'agg_category']\n")
-        f.write(f"{'='*80}\n")
+    df_transac = donnees_transac_filtered.select("i_uniq_kpi").unique()
     
-    syn_donnees_transac_pivot = syn_donnees_transac.unpivot(
-        index=["i_uniq_kpi", "agg_category"],
-        on=["netamount", "nops", "min_amount", "max_amount"],
-        variable_name="_NAME_",
-        value_name="COL1",
-    )
-    
-    write_debug("STEP 6: syn_donnees_transac_pivot APRES UNPIVOT", syn_donnees_transac_pivot)
-    
-    with open(DEBUG_FILE, "a") as f:
-        f.write(f"\n*** VERIFICATION CRITIQUE ***\n")
-        f.write(f"Colonnes présentes: {syn_donnees_transac_pivot.columns}\n")
-        f.write(f"\nType de _NAME_: {syn_donnees_transac_pivot['_NAME_'].dtype}\n")
-        f.write(f"Type de COL1: {syn_donnees_transac_pivot['COL1'].dtype}\n")
-        f.write(f"\nValeurs UNIQUES de _NAME_ (devrait être netamount, nops, min_amount, max_amount):\n")
-        f.write(f"{syn_donnees_transac_pivot.select('_NAME_').unique()}\n")
-        f.write(f"\nSample de _NAME_ (10 premières valeurs):\n")
-        f.write(f"{syn_donnees_transac_pivot.select('_NAME_').head(10)}\n")
-        f.write(f"\nSample de COL1 (10 premières valeurs):\n")
-        f.write(f"{syn_donnees_transac_pivot.select('COL1').head(10)}\n")
+    df_transac = df_transac.join(df_interets, on="i_uniq_kpi", how="left")
+    df_transac = df_transac.join(df_turnover, on="i_uniq_kpi", how="left")
+    df_transac = df_transac.join(df_prlv_retourne, on="i_uniq_kpi", how="left")
+    df_transac = df_transac.join(df_rembt_prlv, on="i_uniq_kpi", how="left")
+    df_transac = df_transac.join(df_saisie, on="i_uniq_kpi", how="left")
+    df_transac = df_transac.join(df_nops, on="i_uniq_kpi", how="left")
     
     # =========================================================================
-    # STEP 7: Cast COL1 en Float64
+    # STEP 8: Calcul des features métier
     # =========================================================================
-    syn_donnees_transac_pivot = syn_donnees_transac_pivot.with_columns(
-        pl.col("COL1").cast(pl.Float64, strict=False)
-    )
     
-    write_debug("STEP 7: APRES CAST COL1", syn_donnees_transac_pivot)
-    
-    with open(DEBUG_FILE, "a") as f:
-        f.write(f"\nType de COL1 après cast: {syn_donnees_transac_pivot['COL1'].dtype}\n")
-    
-    # =========================================================================
-    # STEP 8: CONCAT_STR - ÉTAPE CRITIQUE
-    # =========================================================================
-    with open(DEBUG_FILE, "a") as f:
-        f.write(f"\n{'='*80}\n")
-        f.write("STEP 8: AVANT CONCAT_STR\n")
-        f.write(f"On va concaténer: agg_category + _NAME_\n")
-        f.write(f"Exemple attendu: 'turnover__' + 'netamount' = 'turnover__netamount'\n")
-        f.write(f"{'='*80}\n")
-    
-    syn_donnees_transac_pivot = syn_donnees_transac_pivot.with_columns(
-        pl.concat_str([
-            pl.col("agg_category").cast(pl.Utf8),
-            pl.col("_NAME_").cast(pl.Utf8)
-        ]).alias("agg_category_NAME")
-    )
-    
-    write_debug("STEP 8: APRES CONCAT_STR", syn_donnees_transac_pivot)
-    
-    with open(DEBUG_FILE, "a") as f:
-        f.write(f"\n*** VERIFICATION CRITIQUE ***\n")
-        f.write(f"Type de agg_category_NAME: {syn_donnees_transac_pivot['agg_category_NAME'].dtype}\n")
-        f.write(f"\nValeurs UNIQUES de agg_category_NAME:\n")
-        unique_names = syn_donnees_transac_pivot.select('agg_category_NAME').unique()
-        f.write(f"{unique_names}\n")
-        f.write(f"\nNombre de valeurs uniques: {unique_names.height}\n")
-        f.write(f"\nListe des valeurs uniques:\n")
-        for val in unique_names['agg_category_NAME'].to_list():
-            f.write(f"  - '{val}'\n")
-    
-    # =========================================================================
-    # STEP 9: PIVOT - ÉTAPE CRITIQUE
-    # =========================================================================
-    with open(DEBUG_FILE, "a") as f:
-        f.write(f"\n{'='*80}\n")
-        f.write("STEP 9: AVANT PIVOT\n")
-        f.write(f"on='agg_category_NAME'\n")
-        f.write(f"index='i_uniq_kpi'\n")
-        f.write(f"values='COL1'\n")
-        f.write(f"aggregate_function='sum'\n")
-        f.write(f"{'='*80}\n")
-    
-    syn_donnees_transac_pivot_final = syn_donnees_transac_pivot.pivot(
-        on="agg_category_NAME",
-        index="i_uniq_kpi",
-        values="COL1",
-        aggregate_function="sum",
-    )
-    
-    write_debug("STEP 9: syn_donnees_transac_pivot_final APRES PIVOT", syn_donnees_transac_pivot_final)
-    
-    with open(DEBUG_FILE, "a") as f:
-        f.write(f"\n*** COLONNES CREEES PAR LE PIVOT ***\n")
-        for col in syn_donnees_transac_pivot_final.columns:
-            f.write(f"  - '{col}': {syn_donnees_transac_pivot_final[col].dtype}\n")
-    
-    # =========================================================================
-    # STEP 10: JOIN avec df_nops
-    # =========================================================================
-    df_transac = syn_donnees_transac_pivot_final.join(df_nops, on="i_uniq_kpi", how="left")
-    
-    write_debug("STEP 10: df_transac APRES JOIN", df_transac)
-    
-    # =========================================================================
-    # STEP 11: Calcul des features
-    # =========================================================================
-    with open(DEBUG_FILE, "a") as f:
-        f.write(f"\n{'='*80}\n")
-        f.write("STEP 11: AVANT CALCUL FEATURES\n")
-        f.write(f"Colonnes disponibles pour calcul:\n")
-        for col in df_transac.columns:
-            f.write(f"  - {col}\n")
-        f.write(f"\nColonnes attendues:\n")
-        expected_cols = [
-            "rembt_prlv_sepa__max_amount",
-            "prlv_sepa_retourne__nops", 
-            "saisie__nops",
-            "interets__netamount",
-            "turnover__netamount",
-            "nops"
-        ]
-        for col in expected_cols:
-            if col in df_transac.columns:
-                f.write(f"  ✓ {col} PRESENT\n")
-            else:
-                f.write(f"  ✗ {col} ABSENT!\n")
-        f.write(f"{'='*80}\n")
-    
-    # remb_sepa_max
+    # remb_sepa_max : montant max remboursement prélèvement SEPA > seuil
     df_transac = df_transac.with_columns(
         pl.when(pl.col("rembt_prlv_sepa__max_amount") > 3493.57007)
         .then(pl.lit("1"))
@@ -284,7 +138,7 @@ def add_transac_features(df_main: pl.DataFrame, donnees_transac: pl.DataFrame) -
         .alias("remb_sepa_max")
     )
 
-    # pres_prlv_retourne
+    # pres_prlv_retourne : présence de prélèvement SEPA retourné
     df_transac = df_transac.with_columns(
         pl.when(pl.col("prlv_sepa_retourne__nops") > 0)
         .then(pl.lit("1"))
@@ -292,7 +146,7 @@ def add_transac_features(df_main: pl.DataFrame, donnees_transac: pl.DataFrame) -
         .alias("pres_prlv_retourne")
     )
 
-    # pres_saisie
+    # pres_saisie : Présence de saisie arrêt ou ATD
     df_transac = df_transac.with_columns(
         pl.when(pl.col("saisie__nops") > 0)
         .then(pl.lit("1"))
@@ -300,23 +154,24 @@ def add_transac_features(df_main: pl.DataFrame, donnees_transac: pl.DataFrame) -
         .alias("pres_saisie")
     )
 
-    # net_interets_sur_turnover
+    # net_interets_sur_turnover : ratio intérêts débiteurs / turnover
     df_transac = df_transac.with_columns(
-        [
-            pl.when(pl.col("interets__netamount").is_null())
-            .then(pl.lit("0"))
-            .when(pl.col("interets__netamount") == 0)
-            .then(pl.lit("0"))
-            .when(pl.col("turnover__netamount").is_null())
-            .then(pl.lit("0"))
-            .when(pl.col("turnover__netamount") == 0)
-            .then(pl.lit("0"))
-            .otherwise(pl.col("interets__netamount").cast(pl.Float64) / pl.col("turnover__netamount").cast(pl.Float64))
-            .alias("net_interets_sur_turnover"),
-        ]
+        pl.when(pl.col("interets__netamount").is_null())
+        .then(pl.lit(0.0))
+        .when(pl.col("interets__netamount") == 0)
+        .then(pl.lit(0.0))
+        .when(pl.col("turnover__netamount").is_null())
+        .then(pl.lit(0.0))
+        .when(pl.col("turnover__netamount") == 0)
+        .then(pl.lit(0.0))
+        .otherwise(
+            pl.col("interets__netamount").cast(pl.Float64) / 
+            pl.col("turnover__netamount").cast(pl.Float64)
+        )
+        .alias("net_interets_sur_turnover")
     )
-    df_transac = df_transac.cast({"net_interets_sur_turnover": pl.Float64})
     
+    # net_int_turnover : indicateur binaire basé sur le ratio et le nombre d'opérations
     df_transac = df_transac.with_columns(
         pl.when(
             (pl.col("nops") >= 60)
@@ -328,19 +183,10 @@ def add_transac_features(df_main: pl.DataFrame, donnees_transac: pl.DataFrame) -
         .alias("net_int_turnover")
     )
 
-    write_debug("STEP 11: df_transac APRES CALCUL FEATURES", df_transac)
-
     # =========================================================================
-    # STEP 12: Unique et JOIN final
+    # STEP 9: Dédoublonnage et jointure finale avec df_main
     # =========================================================================
     df_transac = df_transac.unique(subset=["i_uniq_kpi"], keep="first")
     df_main = df_main.join(df_transac, on="i_uniq_kpi", how="left")
-
-    write_debug("STEP 12: df_main FINAL", df_main)
-    
-    with open(DEBUG_FILE, "a") as f:
-        f.write(f"\n{'='*80}\n")
-        f.write("=== FIN add_transac_features ===\n")
-        f.write(f"{'='*80}\n")
 
     return df_main.with_columns(pl.lit("OK").alias("flag_transac"))
