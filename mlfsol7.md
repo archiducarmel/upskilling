@@ -1,42 +1,6 @@
-Excellent progrès ! Le problème de host est résolu (`Allowed hosts: *`). Maintenant c'est un **404 Not Found** - le `--static-prefix` ne fonctionne pas correctement avec MLflow 3.x.
+L'option `--root-path` n'existe pas dans `mlflow server`. Il faut passer par **uvicorn directement**.
 
-## Solution : Utiliser `--root-path` au lieu de `--static-prefix`
-
-```bash
-#!/usr/bin/env bash
-
-export MLFLOW_PORT=8888
-
-MLFLOW_HOME="${HOME}/.mlflow"
-mkdir -p "$MLFLOW_HOME/mlartifacts"
-
-STATIC_PREFIX="/$DOMINO_PROJECT_OWNER/$DOMINO_PROJECT_NAME/r/notebookSession/$DOMINO_RUN_ID"
-
-export SCRIPT_NAME="$STATIC_PREFIX"
-
-echo '¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤'
-echo "Installing MLflow >= 3.1"
-pip install "mlflow>=3.1"
-echo "Installation finished"
-echo '¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤'
-
-echo '¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤'
-echo "Root path: $STATIC_PREFIX"
-echo "Launching MLflow server"
-echo '¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤'
-
-mlflow server \
-    --host 0.0.0.0 \
-    --port 8888 \
-    --backend-store-uri "sqlite:///$MLFLOW_HOME/mlflow.db" \
-    --default-artifact-root "$MLFLOW_HOME/mlartifacts" \
-    --allowed-hosts "*" \
-    --root-path "$STATIC_PREFIX"
-```
-
----
-
-## Alternative : Via uvicorn directement
+## Solution : Uvicorn avec root-path
 
 ```bash
 #!/usr/bin/env bash
@@ -48,6 +12,7 @@ mkdir -p "$MLFLOW_HOME/mlartifacts"
 
 ROOT_PATH="/$DOMINO_PROJECT_OWNER/$DOMINO_PROJECT_NAME/r/notebookSession/$DOMINO_RUN_ID"
 
+# Configuration via variables d'environnement
 export MLFLOW_BACKEND_STORE_URI="sqlite:///$MLFLOW_HOME/mlflow.db"
 export MLFLOW_DEFAULT_ARTIFACT_ROOT="$MLFLOW_HOME/mlartifacts"
 export MLFLOW_ALLOWED_HOSTS="*"
@@ -71,20 +36,19 @@ uvicorn mlflow.server:app \
 
 ---
 
-## Alternative : Wrapper Python avec configuration
+## Alternative : Script Python complet
 
 Créez `mlflow_server.py` :
 
 ```python
 import os
-import subprocess
 import sys
+import subprocess
 
-subprocess.check_call([sys.executable, "-m", "pip", "install", "mlflow>=3.1"])
+# Installation
+subprocess.check_call([sys.executable, "-m", "pip", "install", "mlflow>=3.1", "uvicorn"])
 
-import uvicorn
-from mlflow.server import app
-
+# Configuration
 mlflow_home = os.path.expanduser("~/.mlflow")
 os.makedirs(f"{mlflow_home}/mlartifacts", exist_ok=True)
 
@@ -94,7 +58,11 @@ os.environ["MLFLOW_ALLOWED_HOSTS"] = "*"
 
 root_path = f"/{os.environ.get('DOMINO_PROJECT_OWNER')}/{os.environ.get('DOMINO_PROJECT_NAME')}/r/notebookSession/{os.environ.get('DOMINO_RUN_ID')}"
 
-print(f"Starting MLflow with root_path: {root_path}")
+print(f"Root path: {root_path}")
+print("Starting MLflow server...")
+
+import uvicorn
+from mlflow.server import app
 
 uvicorn.run(
     app,
@@ -113,4 +81,4 @@ python mlflow_server.py
 
 ---
 
-Essayez d'abord la première solution avec `--root-path` au lieu de `--static-prefix` !
+Essayez la première solution avec uvicorn en ligne de commande !
