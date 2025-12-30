@@ -1,226 +1,94 @@
-D'accord, prenons du recul et analysons TOUT.
-
-## Récapitulatif des tentatives et échecs :
-
-| Tentative | Résultat |
-|-----------|----------|
-| `--static-prefix` + `--allowed-hosts "*"` | DNS rebinding malgré "Allowed hosts: *" dans les logs |
-| `--allowed-hosts` avec domaines explicites | Même erreur |
-| uvicorn + `--root-path` | Erreur WSGI/ASGI incompatible |
-| gunicorn + `SCRIPT_NAME` | "Bad Request - path doesn't start with SCRIPT_NAME" |
-| gunicorn sans `SCRIPT_NAME` | Retour DNS rebinding |
-
-## Analyse du problème réel :
-
-Le header Host reçu par MLflow est :
-```
-run-xxx.domino-compute-8ca2164e.svc.cluster.local:8765
-```
-
-**Le problème** : MLflow affiche "Allowed hosts: *" mais **le middleware rejette quand même**. Cela suggère que :
-1. Le wildcard `*` ne fonctionne pas comme prévu dans MLflow 3.x
-2. Ou le middleware est appliqué AVANT que l'option soit lue
-
-## Solution : Patcher le middleware AVANT le chargement
-
-Créez `mlflow_server.py` :
-
-```python
-import os
-import sys
-import subprocess
-
-# Installation
-subprocess.check_call([sys.executable, "-m", "pip", "install", "mlflow>=3.1", "gunicorn"])
-
-# ============================================
-# PATCH DU MIDDLEWARE DE SÉCURITÉ
-# Doit être fait AVANT d'importer mlflow.server
-# ============================================
-
-# Patch 1: Désactiver la vérification dans fastapi_security
-try:
-    import mlflow.server.fastapi_security as security_module
-    
-    # Remplacer la fonction de validation
-    original_validate = getattr(security_module, 'validate_host', None)
-    if original_validate:
-        security_module.validate_host = lambda *args, **kwargs: True
-    
-    # Désactiver le middleware
-    if hasattr(security_module, 'SecurityMiddleware'):
-        class DummyMiddleware:
-            def __init__(self, app, **kwargs):
-                self.app = app
-            async def __call__(self, scope, receive, send):
-                await self.app(scope, receive, send)
-        security_module.SecurityMiddleware = DummyMiddleware
-    
-    print("[PATCH] fastapi_security patched successfully")
-except Exception as e:
-    print(f"[PATCH] fastapi_security patch failed: {e}")
-
-# Patch 2: Désactiver dans handlers si présent
-try:
-    import mlflow.server.handlers as handlers_module
-    
-    if hasattr(handlers_module, '_is_valid_host'):
-        handlers_module._is_valid_host = lambda *args, **kwargs: True
-    if hasattr(handlers_module, 'is_valid_host'):
-        handlers_module.is_valid_host = lambda *args, **kwargs: True
-    
-    print("[PATCH] handlers patched successfully")
-except Exception as e:
-    print(f"[PATCH] handlers patch failed: {e}")
-
-# Patch 3: Variable d'environnement pour forcer
-os.environ["MLFLOW_ALLOWED_HOSTS"] = "*"
-os.environ["MLFLOW_DISABLE_HOST_CHECK"] = "true"
-
-# ============================================
-# CONFIGURATION MLFLOW
-# ============================================
-
-mlflow_home = os.path.expanduser("~/.mlflow")
-os.makedirs(f"{mlflow_home}/mlartifacts", exist_ok=True)
-
-os.environ["MLFLOW_BACKEND_STORE_URI"] = f"sqlite:///{mlflow_home}/mlflow.db"
-os.environ["MLFLOW_DEFAULT_ARTIFACT_ROOT"] = f"{mlflow_home}/mlartifacts"
-
-print(f"Backend Store: sqlite:///{mlflow_home}/mlflow.db")
-print(f"Artifact Root: {mlflow_home}/mlartifacts")
-print("Starting MLflow server...")
-
-# ============================================
-# LANCEMENT VIA GUNICORN
-# ============================================
-
-os.system('gunicorn --bind 0.0.0.0:8888 --workers 2 --timeout 120 mlflow.server:app')
-```
-
-Puis `app.sh` :
-
-```bash
 #!/usr/bin/env bash
-python mlflow_server.py
-```
+set -euo pipefail
 
----
+###############################################################################
+# Domino App: MLflow Tracking Server
+#
+# Expected environment variables (set them in Domino Project/App env vars):
+#   MLFLOW_BACKEND_STORE_URI        (required) e.g. postgresql+psycopg2://user:pass@host:5432/mlflow
+#   MLFLOW_DEFAULT_ARTIFACT_ROOT    (required) e.g. s3://my-mlflow-artifacts/proj-x
+#
+# Optional (S3 / MinIO / enterprise object storage):
+#   AWS_ACCESS_KEY_ID
+#   AWS_SECRET_ACCESS_KEY
+#   AWS_SESSION_TOKEN
+#   AWS_DEFAULT_REGION
+#   MLFLOW_S3_ENDPOINT_URL          e.g. https://minio.company.tld (or COS/S3 compatible endpoint)
+#   AWS_CA_BUNDLE                  path to internal CA bundle if needed
+#
+# App runtime:
+#   PORT                            default 8888 (Domino-friendly)
+#   MLFLOW_WORKERS                  default: min(4, nproc)
+#   MLFLOW_GUNICORN_OPTS            extra gunicorn flags (timeouts, etc.)
+###############################################################################
 
-## Alternative : Patch plus agressif au niveau WSGI
+echo "[app.sh] Starting MLflow on Domino..."
 
-Créez `mlflow_server.py` :
+# --- Port: Domino proxy friendly ---
+PORT="${PORT:-8888}"
 
-```python
-import os
+# --- Hard requirements ---
+: "${MLFLOW_BACKEND_STORE_URI:?Missing env var MLFLOW_BACKEND_STORE_URI}"
+: "${MLFLOW_DEFAULT_ARTIFACT_ROOT:?Missing env var MLFLOW_DEFAULT_ARTIFACT_ROOT}"
+
+# --- Ensure mlflow is available (in a bank you typically bake this into the Domino Environment image) ---
+if ! command -v mlflow >/dev/null 2>&1; then
+  echo "[app.sh] ERROR: 'mlflow' binary not found in PATH."
+  echo "[app.sh] In an enterprise setup, install MLflow in the Domino Compute Environment image."
+  echo "[app.sh] Example (Dockerfile): RUN pip install 'mlflow[extras]' psycopg2-binary boto3"
+  exit 127
+fi
+
+# --- Basic dependency sanity checks (backend DB drivers / S3 SDK) ---
+python - <<'PY'
 import sys
-import subprocess
+missing=[]
+for mod in ["mlflow"]:
+    try: __import__(mod)
+    except Exception: missing.append(mod)
+# psycopg2 is needed for postgres backend-store-uri (common in enterprise)
+try: __import__("psycopg2")
+except Exception: pass
+# boto3 needed for s3 artifact browsing / UI downloads
+try: __import__("boto3")
+except Exception: pass
+if missing:
+    print("[app.sh] Missing python modules:", missing, file=sys.stderr)
+    sys.exit(1)
+print("[app.sh] Python deps OK")
+PY
 
-subprocess.check_call([sys.executable, "-m", "pip", "install", "mlflow>=3.1", "gunicorn", "werkzeug"])
+# --- Compute a safe default worker count ---
+NPROC="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
+DEFAULT_WORKERS="$NPROC"
+if [ "$DEFAULT_WORKERS" -gt 4 ]; then DEFAULT_WORKERS=4; fi
+MLFLOW_WORKERS="${MLFLOW_WORKERS:-$DEFAULT_WORKERS}"
 
-# Configuration
-mlflow_home = os.path.expanduser("~/.mlflow")
-os.makedirs(f"{mlflow_home}/mlartifacts", exist_ok=True)
+# --- Gunicorn defaults (safe for slow artifact listing / large UI requests) ---
+# You can override via MLFLOW_GUNICORN_OPTS in Domino env vars.
+# NOTE: keep logs to stdout/stderr for Domino log collection.
+GUNICORN_OPTS_DEFAULT="--timeout 120 --graceful-timeout 30 --keep-alive 5 --access-logfile - --error-logfile -"
+MLFLOW_GUNICORN_OPTS="${MLFLOW_GUNICORN_OPTS:-$GUNICORN_OPTS_DEFAULT}"
 
-os.environ["MLFLOW_BACKEND_STORE_URI"] = f"sqlite:///{mlflow_home}/mlflow.db"
-os.environ["MLFLOW_DEFAULT_ARTIFACT_ROOT"] = f"{mlflow_home}/mlartifacts"
-os.environ["MLFLOW_ALLOWED_HOSTS"] = "*"
+# --- Print non-sensitive config (never print secrets) ---
+echo "[app.sh] PORT=$PORT"
+echo "[app.sh] MLFLOW_WORKERS=$MLFLOW_WORKERS"
+echo "[app.sh] Backend store: ${MLFLOW_BACKEND_STORE_URI%%:*}://***"
+echo "[app.sh] Artifact root: $MLFLOW_DEFAULT_ARTIFACT_ROOT"
+if [ -n "${MLFLOW_S3_ENDPOINT_URL:-}" ]; then
+  echo "[app.sh] Using S3 endpoint: $MLFLOW_S3_ENDPOINT_URL"
+fi
 
-# Import et patch
-from mlflow.server import app as mlflow_app
+# --- Recommended: ensure Domino / corporate proxy doesn't buffer too aggressively (best-effort) ---
+export PYTHONUNBUFFERED=1
 
-# Créer un wrapper WSGI qui bypasse la vérification du host
-class HostBypassMiddleware:
-    def __init__(self, app):
-        self.app = app
-    
-    def __call__(self, environ, start_response):
-        # Forcer le host à localhost pour bypasser la vérification
-        environ['HTTP_HOST'] = 'localhost:8888'
-        environ['SERVER_NAME'] = 'localhost'
-        environ['SERVER_PORT'] = '8888'
-        return self.app(environ, start_response)
-
-# Wrapper l'app
-wrapped_app = HostBypassMiddleware(mlflow_app)
-
-print("Starting MLflow with host bypass middleware...")
-
-# Exporter pour gunicorn
-app = wrapped_app
-```
-
-Créez aussi `gunicorn_config.py` :
-
-```python
-bind = "0.0.0.0:8888"
-workers = 2
-timeout = 120
-```
-
-Puis `app.sh` :
-
-```bash
-#!/usr/bin/env bash
-
-pip install "mlflow>=3.1" gunicorn
-
-python -c "
-import os
-import sys
-
-mlflow_home = os.path.expanduser('~/.mlflow')
-os.makedirs(f'{mlflow_home}/mlartifacts', exist_ok=True)
-
-os.environ['MLFLOW_BACKEND_STORE_URI'] = f'sqlite:///{mlflow_home}/mlflow.db'
-os.environ['MLFLOW_DEFAULT_ARTIFACT_ROOT'] = f'{mlflow_home}/mlartifacts'
-os.environ['MLFLOW_ALLOWED_HOSTS'] = '*'
-
-from mlflow.server import app as mlflow_app
-
-class HostBypassMiddleware:
-    def __init__(self, app):
-        self.app = app
-    
-    def __call__(self, environ, start_response):
-        environ['HTTP_HOST'] = 'localhost:8888'
-        environ['SERVER_NAME'] = 'localhost'
-        environ['SERVER_PORT'] = '8888'
-        return self.app(environ, start_response)
-
-import mlflow.server
-mlflow.server.app = HostBypassMiddleware(mlflow_app)
-print('Middleware applied')
-"
-
-gunicorn --bind 0.0.0.0:8888 --workers 2 mlflow.server:app
-```
-
----
-
-## Solution de secours : MLflow 2.x
-
-Si rien ne fonctionne, MLflow 2.x n'a pas ce middleware strict :
-
-```bash
-#!/usr/bin/env bash
-
-MLFLOW_HOME="${HOME}/.mlflow"
-mkdir -p "$MLFLOW_HOME/mlartifacts"
-
-echo '¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤'
-echo "Installing MLflow 2.x (sans middleware strict)"
-pip install "mlflow>=2.0,<3.0"
-echo "Installation finished"
-echo '¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤'
-
-mlflow server \
-    --host 0.0.0.0 \
-    --port 8888 \
-    --backend-store-uri "sqlite:///$MLFLOW_HOME/mlflow.db" \
-    --default-artifact-root "$MLFLOW_HOME/mlartifacts"
-```
-
----
-
-Essayez d'abord l'**Alternative avec HostBypassMiddleware**, sinon passez à **MLflow 2.x** !
+# --- Start MLflow server ---
+# We bind on 0.0.0.0 so Domino can route traffic into the container.
+# We keep it stateless; metadata in DB, artifacts in S3-compatible storage.
+exec mlflow server \
+  --host 0.0.0.0 \
+  --port "$PORT" \
+  --workers "$MLFLOW_WORKERS" \
+  --backend-store-uri "$MLFLOW_BACKEND_STORE_URI" \
+  --default-artifact-root "$MLFLOW_DEFAULT_ARTIFACT_ROOT" \
+  --gunicorn-opts "$MLFLOW_GUNICORN_OPTS"
