@@ -152,3 +152,87 @@ La spec attend `remb_sepa_max='2'` mais le code produit `NULL`. Il faut soit :
 1. `print("aaaa", result)` dans le code
 2. Confusion récurrente entre "1 entreprise avec N transactions" vs "N entreprises avec 1 transaction"
 3. Incohérence spec/code sur le comportement avec catégories non-modèle
+
+---
+Salut,
+
+J'ai analysé les tests unitaires de `preprocessing_transac.py` en les comparant aux specs. Y'a plusieurs problèmes, je te détaille ça :
+
+---
+
+**1. `test_saisie_category_merge` → NOK**
+
+Ce que la spec prévoit :
+- 1 entreprise (E001) avec 4 lignes de transactions
+- categories = `['attri_blocage', 'atd_tres_pub', 'interets', 'turnover']`
+- nops_category = `[1, 2, 1, 1]`
+- Résultat attendu : `saisie__nops = 3` (1+2 des deux catégories fusionnées)
+
+Ce qui est implémenté :
+- 2 entreprises différentes (1000004151300000 et 3920010525200000)
+- 2 lignes seulement, une par entreprise
+- nops_category = `[1, 2]`
+
+Pourquoi c'est faux : Le code fait un `group_by("i_uniq_kpi")`, donc chaque entreprise est traitée séparément. La somme 1+2=3 est impossible puisque les données sont sur 2 entreprises différentes. L'entreprise 1 aura `saisie__nops=1`, l'entreprise 2 aura `saisie__nops=2`. Le test passe peut-être par hasard mais il teste pas ce qu'il faut.
+
+---
+
+**2. `test_division_by_zero_turnover` → NOK**
+
+Ce que la spec prévoit :
+- 1 entreprise (E001) avec 2 transactions
+- Une ligne `category='interets'` avec `netamount=-100`
+- Une ligne `category='turnover'` avec `netamount=0`
+- Résultat attendu : `net_interets_sur_turnover=0.0` (pas de division par zéro)
+
+Ce qui est implémenté :
+- 2 entreprises différentes (1000004151300000 et 3920010525200000)
+- Entreprise 1 a seulement `interets` (pas de turnover)
+- Entreprise 2 a seulement `turnover=0` (pas d'interets)
+
+Pourquoi c'est faux : Le test ne teste PAS la division par zéro. Après les jointures :
+- Entreprise 1 aura `interets__netamount=-100` et `turnover__netamount=NULL`
+- Entreprise 2 aura `interets__netamount=NULL` et `turnover__netamount=0`
+
+Aucune des deux n'a les deux valeurs en même temps. On teste le cas NULL, pas le cas division par zéro.
+
+---
+
+**3. `test_non_model_categories_only` → NOK (et y'a un print qui traine)**
+
+Ce que la spec prévoit :
+- 1 entreprise avec uniquement des transactions `'agios'` et `'amort_pret'`
+- Ces catégories sont filtrées (pas utilisées par le modèle)
+- Résultat attendu : colonnes à NULL, puis `remb_sepa_max='2'`, etc.
+
+Ce qui est implémenté :
+- Le test vérifie `remb_sepa_max='2'`
+
+Pourquoi c'est faux : Quand toutes les transactions d'une entreprise sont filtrées, elle disparait de `df_transac`. La jointure LEFT avec `df_main` produit des NULL pour toutes les colonnes transac. Le code ne met PAS de valeur par défaut '2' après la jointure. Donc `remb_sepa_max` sera NULL, pas '2'.
+
+Soit la spec est fausse, soit y'a un bug dans le code. À clarifier.
+
+Aussi : y'a un `print("aaaa", result)` dans le test, à virer.
+
+---
+
+**4. `test_net_int_turnover_double_condition` → À vérifier**
+
+Le test passe mais je suis pas sûr que ce soit pour les bonnes raisons. Le code calcule `nops = SUM(nops_total)` par entreprise. Dans le test, chaque entreprise a 2 lignes avec `nops_total=70` chacune, donc `nops=140` au final (pas 70). La condition `nops >= 60` est toujours vraie. Le test valide le bon comportement mais avec des données qui masquent un éventuel problème.
+
+---
+
+**5. `test_null_vs_zero_nops_prlv_retourne` → Fragile**
+
+Le test utilise :
+```python
+self.assertTrue(result.filter(...)["prlv_sepa_retourne__nops"][0] is None)
+```
+
+En Polars, la comparaison `is None` sur une valeur extraite peut être instable selon les versions. Mieux vaut utiliser `.is_null()[0]` ou vérifier autrement.
+
+---
+
+En résumé, les tests 1, 2 et 8 sont à réécrire. Le problème récurrent c'est la confusion entre "1 entreprise avec plusieurs transactions" et "plusieurs entreprises avec 1 transaction chacune".
+
+Tu veux que je corrige les tests ?
