@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Monitoring Architecture - v8 (11 Flows)</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', system-ui, sans-serif; 
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            min-height: 100vh;
+            padding: 15px;
+        }
+        
+        .container { max-width: 1500px; margin: 0 auto; }
+        
+        /* Header */
+        .header { text-align: center; margin-bottom: 10px; }
+        .badge { 
+            display: inline-block; background: #1e293b; color: #94a3b8; 
+            padding: 4px 12px; border-radius: 15px; font-size: 8px; 
+            letter-spacing: 1px; margin-bottom: 4px;
+        }
+        .title { font-size: 22px; font-weight: 700; color: #0f172a; margin-bottom: 2px; }
+        .subtitle { color: #64748b; font-size: 10px; }
+        
+        /* Sequence Banner */
+        .sequence-banner {
+            background: linear-gradient(90deg, #1e293b 0%, #334155 100%);
+            border-radius: 8px; padding: 8px 12px; margin-bottom: 10px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .sequence-title { color: #94a3b8; font-size: 8px; font-weight: 700; }
+        .sequence-flows { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+        .seq-group { display: flex; align-items: center; gap: 1px; padding: 2px 4px; border-radius: 4px; }
+        .seq-group.ingestion { background: rgba(244,63,94,0.2); }
+        .seq-group.batch { background: rgba(245,158,11,0.2); }
+        .seq-group.platform { background: rgba(16,185,129,0.2); }
+        .seq-group.viz { background: rgba(59,130,246,0.2); }
+        .seq-num {
+            width: 16px; height: 16px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 7px; font-weight: 700;
+        }
+        .seq-num.f1 { background: #f43f5e; }
+        .seq-num.f2 { background: #8b5cf6; }
+        .seq-num.f3 { background: #64748b; }
+        .seq-num.f4a { background: #f59e0b; }
+        .seq-num.f4b { background: #06b6d4; }
+        .seq-num.f5a { background: #06b6d4; }
+        .seq-num.f5b { background: #f59e0b; }
+        .seq-num.f8a { background: #10b981; }
+        .seq-num.f8b { background: #8b5cf6; }
+        .seq-num.f9 { background: #10b981; }
+        .seq-num.f10 { background: #3b82f6; }
+        .seq-arrow { color: #64748b; font-size: 8px; }
+        .seq-label { font-size: 5px; color: #94a3b8; margin-top: 1px; }
+        
+        /* Main Layout - 7 columns */
+        .platforms-row {
+            display: grid;
+            grid-template-columns: 280px 40px 480px 40px 150px 20px 180px;
+            gap: 0; align-items: stretch;
+        }
+        
+        /* Storage Row - 3 columns */
+        .storage-row {
+            display: grid;
+            grid-template-columns: 280px 40px 480px;
+            gap: 0; margin-top: 8px;
+        }
+        
+        /* Platform Cards */
+        .platform-card {
+            background: white; border-radius: 10px; overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+        .platform-header { padding: 8px 10px; display: flex; align-items: center; gap: 6px; }
+        .platform-header.dark { background: linear-gradient(135deg, #1e293b 0%, #334155 100%); }
+        .platform-header.blue { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); }
+        .platform-header.amber { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+        .platform-icon { font-size: 12px; }
+        .platform-title { font-size: 8px; font-weight: 700; color: white; }
+        .platform-subtitle { font-size: 6px; color: rgba(255,255,255,0.7); }
+        .platform-body { padding: 8px; }
+        
+        /* Section Labels */
+        .section-label {
+            font-size: 6px; font-weight: 700; padding: 3px 6px;
+            border-radius: 4px; text-align: center; margin-bottom: 5px;
+        }
+        .section-label.gray { background: #f1f5f9; color: #475569; }
+        .section-label.green { background: #d1fae5; color: #065f46; }
+        .section-label.amber { background: #fef3c7; color: #92400e; }
+        
+        /* UC Cards */
+        .uc-card {
+            border-radius: 5px; padding: 4px 6px; margin-bottom: 3px;
+            border: 1.5px solid; display: flex; align-items: center; gap: 4px;
+        }
+        .uc-card.yellow { border-color: #fbbf24; background: #fffbeb; }
+        .uc-card.green { border-color: #34d399; background: #ecfdf5; }
+        .uc-card.purple { border-color: #a78bfa; background: #f5f3ff; }
+        .uc-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+        .uc-dot.yellow { background: #fbbf24; }
+        .uc-dot.green { background: #34d399; }
+        .uc-dot.purple { background: #a78bfa; }
+        .uc-info { flex: 1; }
+        .uc-name { font-size: 6px; font-weight: 700; }
+        .uc-name.yellow { color: #92400e; }
+        .uc-name.green { color: #065f46; }
+        .uc-name.purple { color: #5b21b6; }
+        .uc-type { font-size: 5px; color: #64748b; }
+        .uc-file {
+            font-family: monospace; font-size: 5px; padding: 1px 4px;
+            border-radius: 2px; font-weight: 600;
+        }
+        .uc-file.yellow { background: #fef3c7; color: #92400e; }
+        .uc-file.green { background: #d1fae5; color: #065f46; }
+        .uc-file.purple { background: #ede9fe; color: #5b21b6; }
+        
+        /* Flow Badges */
+        .flow-badge {
+            display: inline-flex; padding: 2px 4px; border-radius: 3px;
+            font-size: 5px; font-weight: 700; margin: 1px;
+        }
+        .flow-badge.f1 { background: #fef2f2; border: 1px solid #f43f5e; color: #be123c; }
+        .flow-badge.f4a { background: #fef3c7; border: 1px solid #f59e0b; color: #92400e; }
+        .flow-badge.f4b { background: #ecfeff; border: 1px solid #06b6d4; color: #0e7490; }
+        .flow-badge.f8a { background: #f0fdf4; border: 1px solid #10b981; color: #059669; }
+        
+        /* Important note */
+        .important-note {
+            background: #fef2f2; border: 1px solid #f43f5e; border-radius: 4px;
+            padding: 3px 5px; margin-top: 4px; font-size: 5px; color: #be123c;
+        }
+        .important-note strong { color: #9f1239; }
+        
+        /* Batch Eval */
+        .batch-eval-box {
+            border: 1.5px dashed #f59e0b; border-radius: 6px; padding: 5px;
+            margin-top: 5px; background: rgba(245, 158, 11, 0.05);
+        }
+        .batch-eval-title {
+            background: #f59e0b; color: white; font-size: 5px; font-weight: 700;
+            padding: 2px 6px; border-radius: 4px; display: inline-block; margin-bottom: 4px;
+        }
+        .monitor-item {
+            background: white; border-radius: 3px; padding: 2px 4px; margin-bottom: 2px;
+            font-size: 5px; font-weight: 600; color: #92400e;
+            display: flex; align-items: center; gap: 3px; border: 1px solid;
+        }
+        .monitor-item.yellow { border-color: #fbbf24; }
+        .monitor-item.green { border-color: #34d399; }
+        .monitor-item.purple { border-color: #a78bfa; }
+        .monitor-dot { width: 4px; height: 4px; border-radius: 50%; }
+        .batch-flow-info {
+            background: white; border: 1px solid #fde68a; border-radius: 3px;
+            padding: 3px; margin-top: 4px; text-align: center; font-size: 5px; color: #92400e;
+        }
+        
+        /* Flow Corridors */
+        .flow-corridor {
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; padding: 5px 2px; border-radius: 4px;
+        }
+        .flow-corridor.h1 { background: linear-gradient(180deg, rgba(244,63,94,0.06) 0%, rgba(16,185,129,0.06) 100%); }
+        .flow-corridor.h2 { background: linear-gradient(180deg, rgba(245,158,11,0.08) 0%, rgba(245,158,11,0.04) 100%); }
+        .h-flow { display: flex; flex-direction: column; align-items: center; margin: 6px 0; }
+        .h-flow-num {
+            width: 16px; height: 16px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 7px; font-weight: 700; margin-bottom: 2px;
+        }
+        .h-flow-num.f1 { background: #f43f5e; }
+        .h-flow-num.f5b { background: #f59e0b; }
+        .h-flow-num.f8a { background: #10b981; }
+        .h-flow-num.f9 { background: #10b981; }
+        .h-flow-arrow { display: flex; align-items: center; }
+        .h-flow-line { width: 14px; height: 2px; border-radius: 1px; }
+        .h-flow-line.f1 { background: #f43f5e; }
+        .h-flow-line.f5b { background: #f59e0b; }
+        .h-flow-line.f8a { background: #10b981; }
+        .h-flow-line.f9 { background: #10b981; }
+        .h-flow-tip { width: 0; height: 0; border-top: 3px solid transparent; border-bottom: 3px solid transparent; }
+        .h-flow-tip.f1 { border-left: 5px solid #f43f5e; }
+        .h-flow-tip.f5b { border-left: 5px solid #f59e0b; }
+        .h-flow-tip.f8a { border-left: 5px solid #10b981; }
+        .h-flow-tip.f9 { border-left: 5px solid #10b981; }
+        .h-flow-label { font-size: 4px; color: #64748b; text-align: center; }
+        
+        /* Layers */
+        .layer { border-radius: 6px; padding: 5px; margin-bottom: 4px; }
+        .layer:last-child { margin-bottom: 0; }
+        .layer.obs { background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%); border: 1px solid #fb7185; }
+        .layer.eval { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 1px solid #34d399; }
+        .layer.viz { background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border: 1px solid #60a5fa; }
+        .layer-header { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+        .layer-num {
+            width: 14px; height: 14px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-weight: 700; font-size: 7px;
+        }
+        .layer-num.red { background: #f43f5e; }
+        .layer-num.green { background: #10b981; }
+        .layer-num.blue { background: #3b82f6; }
+        .layer-title { font-size: 7px; font-weight: 700; }
+        .layer-title.red { color: #be123c; }
+        .layer-title.green { color: #047857; }
+        .layer-title.blue { color: #1d4ed8; }
+        .layer-desc { font-size: 5px; color: #64748b; }
+        
+        /* Components */
+        .component-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+        .component { background: white; border-radius: 4px; padding: 4px 5px; border: 1px solid; }
+        .component.red { border-color: #fecdd3; }
+        .component.green { border-color: #a7f3d0; }
+        .component-title { font-size: 6px; font-weight: 700; margin-bottom: 2px; }
+        .component-title.red { color: #be123c; }
+        .component-title.green { color: #047857; }
+        .component-desc { font-size: 5px; color: #64748b; margin-bottom: 2px; }
+        .endpoint-tag {
+            display: inline-block; background: #f8fafc; border: 1px solid #e2e8f0;
+            border-radius: 2px; padding: 1px 3px; font-family: monospace;
+            font-size: 4px; color: #64748b; margin: 1px;
+        }
+        .component-flows { margin-top: 2px; display: flex; flex-wrap: wrap; gap: 1px; }
+        .mini-badge { padding: 1px 3px; border-radius: 2px; font-size: 5px; font-weight: 700; }
+        .mini-badge.f1 { background: #fef2f2; color: #be123c; }
+        .mini-badge.f2 { background: #f5f3ff; color: #7c3aed; }
+        .mini-badge.f3 { background: #f1f5f9; color: #475569; }
+        .mini-badge.f5a { background: #ecfeff; color: #0891b2; }
+        .mini-badge.f5b { background: #fef3c7; color: #92400e; }
+        .mini-badge.f8a { background: #f0fdf4; color: #059669; }
+        .mini-badge.f8b { background: #f5f3ff; color: #7c3aed; }
+        .mini-badge.f9 { background: #f0fdf4; color: #059669; }
+        .mini-badge.f10 { background: #dbeafe; color: #1d4ed8; }
+        
+        /* Dashboards */
+        .dashboard-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+        .dashboard {
+            background: white; border: 1px solid #bfdbfe; border-radius: 4px;
+            padding: 5px 2px; text-align: center;
+        }
+        .dashboard-icon { font-size: 12px; margin-bottom: 1px; }
+        .dashboard-title { font-size: 5px; font-weight: 700; color: #1e40af; }
+        .viz-flow { text-align: center; margin-top: 4px; }
+        
+        /* LLM Service */
+        .llm-service { border: 1.5px solid #eab308; background: linear-gradient(135deg, #fefce8 0%, #fef9c3 100%); }
+        .llm-body { padding: 5px; }
+        .llm-model {
+            background: white; border: 1px solid #fde047;
+            border-radius: 4px; padding: 4px 5px; margin-bottom: 3px;
+        }
+        .llm-model:last-of-type { margin-bottom: 0; }
+        .llm-model-header { display: flex; align-items: center; gap: 3px; margin-bottom: 2px; }
+        .llm-model-icon { font-size: 9px; }
+        .llm-model-name { font-size: 6px; font-weight: 700; color: #713f12; }
+        .llm-model-type { font-size: 5px; color: #a16207; }
+        .llm-endpoint {
+            display: inline-block; background: #fef9c3; border: 1px solid #facc15;
+            border-radius: 2px; padding: 1px 3px; font-family: monospace;
+            font-size: 4px; color: #854d0e;
+        }
+        .llm-flow-box {
+            background: #fef3c7; border: 1.5px solid #f59e0b; border-radius: 5px;
+            padding: 5px; margin-top: 5px; text-align: center;
+        }
+        .llm-flow-num {
+            width: 16px; height: 16px; border-radius: 50%; background: #f59e0b;
+            color: white; display: inline-flex; align-items: center; justify-content: center;
+            font-size: 7px; font-weight: 700; margin-bottom: 2px;
+        }
+        .llm-flow-text { font-size: 5px; color: #92400e; font-weight: 600; }
+        
+        /* LEGEND - ULTRA COMPACT */
+        .legend-panel {
+            background: #fafafa; border: 1px solid #e2e8f0; border-radius: 8px;
+            padding: 6px;
+        }
+        .legend-title { font-size: 7px; font-weight: 700; color: #1e293b; margin-bottom: 4px; text-align: center; }
+        .legend-section { margin-bottom: 4px; }
+        .legend-section-title { font-size: 5px; font-weight: 700; color: #64748b; margin-bottom: 2px; padding: 2px 4px; border-radius: 3px; }
+        .legend-section-title.ingestion { background: #fef2f2; color: #be123c; }
+        .legend-section-title.batch { background: #fef3c7; color: #92400e; }
+        .legend-section-title.platform { background: #ecfdf5; color: #065f46; }
+        .legend-section-title.viz { background: #dbeafe; color: #1d4ed8; }
+        .legend-item { display: flex; align-items: center; gap: 4px; margin-bottom: 2px; }
+        .legend-num { width: 12px; height: 12px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 6px; font-weight: 700; }
+        .legend-num.f1 { background: #f43f5e; }
+        .legend-num.f2 { background: #8b5cf6; }
+        .legend-num.f3 { background: #64748b; }
+        .legend-num.f4a { background: #f59e0b; }
+        .legend-num.f4b { background: #06b6d4; }
+        .legend-num.f5a { background: #06b6d4; }
+        .legend-num.f5b { background: #f59e0b; }
+        .legend-num.f8a { background: #10b981; }
+        .legend-num.f8b { background: #8b5cf6; }
+        .legend-num.f9 { background: #10b981; }
+        .legend-num.f10 { background: #3b82f6; }
+        .legend-text { font-size: 5px; color: #1e293b; }
+        
+        /* Vertical Flows */
+        .v-flow-corridor {
+            grid-column: 3; background: linear-gradient(90deg, rgba(139,92,246,0.04) 0%, rgba(100,116,139,0.04) 100%);
+            border-radius: 5px; padding: 5px 10px; display: flex; justify-content: space-around; align-items: center;
+        }
+        .v-flow { display: flex; flex-direction: column; align-items: center; }
+        .v-flow-num {
+            width: 12px; height: 12px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 5px; font-weight: 700;
+        }
+        .v-flow-num.f2 { background: #8b5cf6; }
+        .v-flow-num.f3 { background: #64748b; }
+        .v-flow-num.f4a { background: #f59e0b; }
+        .v-flow-num.f4b { background: #06b6d4; }
+        .v-flow-num.f5a { background: #06b6d4; }
+        .v-flow-num.f8b { background: #8b5cf6; }
+        .v-flow-num.f9 { background: #10b981; }
+        .v-flow-num.f10 { background: #3b82f6; }
+        .v-flow-line { width: 2px; height: 10px; margin: 2px 0; }
+        .v-flow-line.f2 { background: #8b5cf6; }
+        .v-flow-line.f3 { background: #64748b; }
+        .v-flow-line.f4a { background: repeating-linear-gradient(180deg, #f59e0b 0, #f59e0b 2px, transparent 2px, transparent 4px); }
+        .v-flow-line.f4b { background: #06b6d4; }
+        .v-flow-line.f5a { background: #06b6d4; }
+        .v-flow-line.f8b { background: #8b5cf6; }
+        .v-flow-line.f9 { background: #10b981; }
+        .v-flow-line.f10 { background: #3b82f6; }
+        .v-flow-arrow-down { width: 0; height: 0; border-left: 3px solid transparent; border-right: 3px solid transparent; }
+        .v-flow-arrow-down.f2 { border-top: 4px solid #8b5cf6; }
+        .v-flow-arrow-down.f3 { border-top: 4px solid #64748b; }
+        .v-flow-arrow-down.f8b { border-top: 4px solid #8b5cf6; }
+        .v-flow-arrow-down.f9 { border-top: 4px solid #10b981; }
+        .v-flow-arrow-up { width: 0; height: 0; border-left: 3px solid transparent; border-right: 3px solid transparent; }
+        .v-flow-arrow-up.f4a { border-bottom: 4px solid #f59e0b; }
+        .v-flow-arrow-up.f4b { border-bottom: 4px solid #06b6d4; }
+        .v-flow-arrow-up.f5a { border-bottom: 4px solid #06b6d4; }
+        .v-flow-arrow-up.f10 { border-bottom: 4px solid #3b82f6; }
+        .v-flow-label { font-size: 4px; color: #64748b; font-weight: 600; }
+        
+        /* Storage */
+        .storage-card {
+            background: white; border-radius: 8px; padding: 6px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+        }
+        .storage-header { display: flex; align-items: center; gap: 4px; margin-bottom: 5px; }
+        .storage-icon { font-size: 10px; }
+        .storage-title { font-size: 7px; font-weight: 700; }
+        .storage-title.amber { color: #92400e; }
+        .storage-title.gray { color: #1e293b; }
+        .storage-subtitle { font-size: 5px; color: #64748b; }
+        .storage-flow-badge {
+            margin-left: auto; padding: 2px 5px; border-radius: 3px;
+            font-size: 6px; font-weight: 700; color: white;
+        }
+        .storage-flow-badge.f4a { background: #f59e0b; }
+        .ref-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+        .ref-box {
+            background: white; border-radius: 4px; padding: 4px;
+            text-align: center; border: 1.5px solid;
+        }
+        .ref-box.yellow { border-color: #fbbf24; }
+        .ref-box.green { border-color: #34d399; }
+        .ref-box.purple { border-color: #a78bfa; }
+        .ref-box-title { font-size: 5px; font-weight: 700; }
+        .ref-box-title.yellow { color: #92400e; }
+        .ref-box-title.green { color: #065f46; }
+        .ref-box-title.purple { color: #5b21b6; }
+        .ref-box-items { font-size: 4px; color: #64748b; }
+        .reference-storage { border: 1.5px dashed #f59e0b; background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); }
+        .data-storage { border: 1.5px solid #94a3b8; }
+        .storage-boxes { display: flex; gap: 5px; align-items: stretch; }
+        .storage-box { flex: 1; border-radius: 5px; padding: 5px; border: 1.5px solid; }
+        .storage-box.table { background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%); border-color: #fb7185; }
+        .storage-box.object { background: linear-gradient(135deg, #ecfeff 0%, #cffafe 100%); border-color: #22d3ee; }
+        .storage-box-header { display: flex; align-items: center; gap: 3px; margin-bottom: 3px; }
+        .storage-box-icon { font-size: 9px; }
+        .storage-box-title { font-size: 6px; font-weight: 700; }
+        .storage-box-title.red { color: #9f1239; }
+        .storage-box-title.cyan { color: #0e7490; }
+        .storage-tags { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 2px; }
+        .storage-tag { padding: 1px 3px; border-radius: 2px; font-size: 4px; font-weight: 600; }
+        .storage-tag.red { background: #ffe4e6; color: #9f1239; }
+        .storage-tag.cyan { background: #cffafe; color: #0e7490; }
+        .storage-flows { display: flex; gap: 2px; flex-wrap: wrap; }
+        .storage-flow { padding: 1px 3px; border-radius: 2px; font-size: 4px; font-weight: 700; color: white; }
+        .storage-flow.f2 { background: #8b5cf6; }
+        .storage-flow.f3 { background: #64748b; }
+        .storage-flow.f4b { background: #06b6d4; }
+        .storage-flow.f5a { background: #06b6d4; }
+        .storage-flow.f8b { background: #8b5cf6; }
+        .storage-flow.f9 { background: #10b981; }
+        .storage-flow.f10 { background: #3b82f6; }
+        .sync-connector { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 3px; }
+        .sync-icon { font-size: 10px; color: #64748b; }
+        .sync-badge { background: #64748b; color: white; padding: 1px 4px; border-radius: 3px; font-size: 5px; font-weight: 700; }
+        .flow-corridor-v { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="badge">📐 ARCHITECTURE v8 — 11 FLOWS SYSTEM</div>
+            <h1 class="title">AI Monitoring Platform</h1>
+            <p class="subtitle">Enterprise ML Observability • Batch Side + Platform Side Evaluation</p>
+        </div>
+        
+        <div class="sequence-banner">
+            <span class="sequence-title">🔄 SEQUENCE</span>
+            <div class="sequence-flows">
+                <div class="seq-group ingestion">
+                    <span class="seq-num f1">①</span><span class="seq-arrow">→</span>
+                    <span class="seq-num f2">②</span><span class="seq-arrow">→</span>
+                    <span class="seq-num f3">③</span>
+                </div>
+                <span class="seq-arrow">|</span>
+                <div class="seq-group batch">
+                    <span class="seq-num f4a">④a</span>
+                    <span class="seq-num f4b">④b</span><span class="seq-arrow">→</span>
+                    <span class="seq-num f8a">⑧a</span><span class="seq-arrow">→</span>
+                    <span class="seq-num f8b">⑧b</span>
+                </div>
+                <span class="seq-arrow">|</span>
+                <div class="seq-group platform">
+                    <span class="seq-num f5a">⑤a</span><span class="seq-arrow">→</span>
+                    <span class="seq-num f5b">⑤b</span><span class="seq-arrow">→</span>
+                    <span class="seq-num f9">⑨</span>
+                </div>
+                <span class="seq-arrow">|</span>
+                <div class="seq-group viz">
+                    <span class="seq-num f10">⑩</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="platforms-row">
+            <!-- INFERENCE -->
+            <div class="platform-card" style="border: 1.5px solid #cbd5e1;">
+                <div class="platform-header dark">
+                    <span class="platform-icon">🎯</span>
+                    <div><div class="platform-title">INFERENCE PLATFORM</div><div class="platform-subtitle">Production</div></div>
+                </div>
+                <div class="platform-body">
+                    <div class="section-label gray">⚡ INFERENCE</div>
+                    <div class="uc-card yellow"><span class="uc-dot yellow"></span><div class="uc-info"><div class="uc-name yellow">UC X — Credit</div><div class="uc-type">API</div></div><span class="uc-file yellow">api.py</span></div>
+                    <div class="uc-card green"><span class="uc-dot green"></span><div class="uc-info"><div class="uc-name green">UC Y — Fraud</div><div class="uc-type">Batch</div></div><span class="uc-file green">batch.py</span></div>
+                    <div class="uc-card purple"><span class="uc-dot purple"></span><div class="uc-info"><div class="uc-name purple">UC Z — NLP</div><div class="uc-type">API</div></div><span class="uc-file purple">api.py</span></div>
+                    <div style="text-align: center; margin-top: 3px;"><span class="flow-badge f1">① Telemetry →</span></div>
+                    <div class="important-note">⚠️ <strong>input</strong> + <strong>output</strong> obligatoires dans chaque trace</div>
+                    
+                    <div class="batch-eval-box">
+                        <span class="batch-eval-title">🎯 BATCH SIDE EVAL</span>
+                        <div class="section-label amber">📊 BATCH MONITORS</div>
+                        <div class="monitor-item yellow"><span class="monitor-dot uc-dot yellow"></span>batch_monitor — X</div>
+                        <div class="monitor-item green"><span class="monitor-dot uc-dot green"></span>batch_monitor — Y</div>
+                        <div class="monitor-item purple"><span class="monitor-dot uc-dot purple"></span>batch_monitor — Z</div>
+                        <div class="batch-flow-info">④a←Ref  ④b←Query  ⑧a→Write</div>
+                        <div style="margin-top: 3px; text-align: center;">
+                            <span class="flow-badge f4a">←④a</span>
+                            <span class="flow-badge f4b">←④b</span>
+                            <span class="flow-badge f8a">⑧a→</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- CORRIDOR 1 -->
+            <div class="flow-corridor h1">
+                <div class="h-flow"><div class="h-flow-num f1">①</div><div class="h-flow-arrow"><div class="h-flow-line f1"></div><div class="h-flow-tip f1"></div></div><div class="h-flow-label">Telem</div></div>
+                <div class="h-flow"><div class="h-flow-num f8a">⑧a</div><div class="h-flow-arrow"><div class="h-flow-line f8a"></div><div class="h-flow-tip f8a"></div></div><div class="h-flow-label">Write</div></div>
+            </div>
+            
+            <!-- MONITORING -->
+            <div class="platform-card" style="border: 1.5px solid #3b82f6;">
+                <div class="platform-header blue">
+                    <span class="platform-icon">🔬</span>
+                    <div><div class="platform-title">MONITORING PLATFORM</div><div class="platform-subtitle">3 Layers</div></div>
+                </div>
+                <div class="platform-body">
+                    <div class="layer obs">
+                        <div class="layer-header"><div class="layer-num red">1</div><div><div class="layer-title red">OBSERVABILITY</div><div class="layer-desc">Receive & Persist</div></div></div>
+                        <div class="component-grid">
+                            <div class="component red"><div class="component-title red">🔌 API</div><span class="endpoint-tag">/traces</span><span class="endpoint-tag">/metrics</span><span class="endpoint-tag">/scores</span><div class="component-flows"><span class="mini-badge f1">←①</span><span class="mini-badge f8a">←⑧a</span><span class="mini-badge f2">②→</span><span class="mini-badge f8b">⑧b→</span></div></div>
+                            <div class="component red"><div class="component-title red">🔁 Sync</div><div class="component-desc">Table → Object</div><div class="component-flows"><span class="mini-badge f3">③</span></div></div>
+                        </div>
+                    </div>
+                    <div class="layer eval">
+                        <div class="layer-header"><div class="layer-num green">2</div><div><div class="layer-title green">EVALUATION</div><div class="layer-desc">Platform Side Quality</div></div></div>
+                        <div class="component-grid">
+                            <div class="component green"><div class="component-title green">🤖 LLM-as-Judge</div><div class="component-desc">AI scoring</div><div class="component-flows"><span class="mini-badge f5a">←⑤a</span><span class="mini-badge f5b">⑤b→</span><span class="mini-badge f9">⑨→</span></div></div>
+                            <div class="component green"><div class="component-title green">🛡️ Safety</div><div class="component-desc">Toxicity, Bias</div><div class="component-flows"><span class="mini-badge f5a">←⑤a</span><span class="mini-badge f9">⑨→</span></div></div>
+                        </div>
+                    </div>
+                    <div class="layer viz">
+                        <div class="layer-header"><div class="layer-num blue">3</div><div><div class="layer-title blue">VISUALIZATION</div><div class="layer-desc">Dashboards</div></div></div>
+                        <div class="dashboard-grid">
+                            <div class="dashboard"><div class="dashboard-icon">📊</div><div class="dashboard-title">Perf</div></div>
+                            <div class="dashboard"><div class="dashboard-icon">📈</div><div class="dashboard-title">Drift</div></div>
+                            <div class="dashboard"><div class="dashboard-icon">✅</div><div class="dashboard-title">Quality</div></div>
+                            <div class="dashboard"><div class="dashboard-icon">🔔</div><div class="dashboard-title">Alerts</div></div>
+                        </div>
+                        <div class="viz-flow"><span class="mini-badge f10">←⑩ Read</span></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- CORRIDOR 2 -->
+            <div class="flow-corridor h2">
+                <div class="h-flow"><div class="h-flow-num f5b">⑤b</div><div class="h-flow-arrow"><div class="h-flow-line f5b"></div><div class="h-flow-tip f5b"></div></div><div class="h-flow-label">LLM</div></div>
+            </div>
+            
+            <!-- LLM -->
+            <div class="platform-card llm-service">
+                <div class="platform-header amber">
+                    <span class="platform-icon">🤖</span>
+                    <div><div class="platform-title">LLM SERVICE</div><div class="platform-subtitle">OSS</div></div>
+                </div>
+                <div class="llm-body">
+                    <div class="llm-model"><div class="llm-model-header"><span class="llm-model-icon">🌀</span><div><div class="llm-model-name">Mistral</div><div class="llm-model-type">7B</div></div></div><span class="llm-endpoint">/chat</span></div>
+                    <div class="llm-model"><div class="llm-model-header"><span class="llm-model-icon">🦙</span><div><div class="llm-model-name">LLaMA</div><div class="llm-model-type">OSS</div></div></div><span class="llm-endpoint">/completions</span></div>
+                    <div class="llm-model"><div class="llm-model-header"><span class="llm-model-icon">⚡</span><div><div class="llm-model-name">Custom</div><div class="llm-model-type">FT</div></div></div><span class="llm-endpoint">/inference</span></div>
+                    <div class="llm-flow-box"><div class="llm-flow-num">⑤b</div><div class="llm-flow-text">←Judge</div></div>
+                </div>
+            </div>
+            
+            <div></div>
+            
+            <!-- LEGEND - COMPACT -->
+            <div class="legend-panel">
+                <div class="legend-title">📍 11 FLOWS</div>
+                <div class="legend-section">
+                    <div class="legend-section-title ingestion">INGESTION</div>
+                    <div class="legend-item"><div class="legend-num f1">①</div><div class="legend-text">Telemetry</div></div>
+                    <div class="legend-item"><div class="legend-num f2">②</div><div class="legend-text">Persist</div></div>
+                    <div class="legend-item"><div class="legend-num f3">③</div><div class="legend-text">Sync</div></div>
+                </div>
+                <div class="legend-section">
+                    <div class="legend-section-title batch">BATCH SIDE</div>
+                    <div class="legend-item"><div class="legend-num f4a">④a</div><div class="legend-text">Get Ref</div></div>
+                    <div class="legend-item"><div class="legend-num f4b">④b</div><div class="legend-text">Query</div></div>
+                    <div class="legend-item"><div class="legend-num f8a">⑧a</div><div class="legend-text">Write</div></div>
+                    <div class="legend-item"><div class="legend-num f8b">⑧b</div><div class="legend-text">Persist</div></div>
+                </div>
+                <div class="legend-section">
+                    <div class="legend-section-title platform">PLATFORM SIDE</div>
+                    <div class="legend-item"><div class="legend-num f5a">⑤a</div><div class="legend-text">Read</div></div>
+                    <div class="legend-item"><div class="legend-num f5b">⑤b</div><div class="legend-text">LLM Call</div></div>
+                    <div class="legend-item"><div class="legend-num f9">⑨</div><div class="legend-text">Write</div></div>
+                </div>
+                <div class="legend-section">
+                    <div class="legend-section-title viz">VISUALIZATION</div>
+                    <div class="legend-item"><div class="legend-num f10">⑩</div><div class="legend-text">Read</div></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- VERTICAL FLOWS -->
+        <div style="display: grid; grid-template-columns: 280px 40px 480px; gap: 0; margin-top: 6px;">
+            <div></div><div></div>
+            <div class="v-flow-corridor">
+                <div class="v-flow"><div class="v-flow-num f2">②</div><div class="v-flow-line f2"></div><div class="v-flow-arrow-down f2"></div><div class="v-flow-label">Persist</div></div>
+                <div class="v-flow"><div class="v-flow-num f3">③</div><div class="v-flow-line f3"></div><div class="v-flow-arrow-down f3"></div><div class="v-flow-label">Sync</div></div>
+                <div class="v-flow"><div class="v-flow-arrow-up f4b"></div><div class="v-flow-line f4b"></div><div class="v-flow-num f4b">④b</div><div class="v-flow-label">Query</div></div>
+                <div class="v-flow"><div class="v-flow-arrow-up f5a"></div><div class="v-flow-line f5a"></div><div class="v-flow-num f5a">⑤a</div><div class="v-flow-label">Read</div></div>
+                <div class="v-flow"><div class="v-flow-num f8b">⑧b</div><div class="v-flow-line f8b"></div><div class="v-flow-arrow-down f8b"></div><div class="v-flow-label">Persist</div></div>
+                <div class="v-flow"><div class="v-flow-num f9">⑨</div><div class="v-flow-line f9"></div><div class="v-flow-arrow-down f9"></div><div class="v-flow-label">Write</div></div>
+                <div class="v-flow"><div class="v-flow-arrow-up f10"></div><div class="v-flow-line f10"></div><div class="v-flow-num f10">⑩</div><div class="v-flow-label">Read</div></div>
+            </div>
+        </div>
+        
+        <!-- STORAGE -->
+        <div class="storage-row">
+            <div class="storage-card reference-storage">
+                <div class="storage-header"><span class="storage-icon">📚</span><div><div class="storage-title amber">REFERENCE STORAGE</div><div class="storage-subtitle">Baselines</div></div><span class="storage-flow-badge f4a">④a↑</span></div>
+                <div class="ref-grid">
+                    <div class="ref-box yellow"><div class="ref-box-title yellow">UC X</div><div class="ref-box-items">Training</div></div>
+                    <div class="ref-box green"><div class="ref-box-title green">UC Y</div><div class="ref-box-items">Training</div></div>
+                    <div class="ref-box purple"><div class="ref-box-title purple">UC Z</div><div class="ref-box-items">Training</div></div>
+                </div>
+            </div>
+            <div class="flow-corridor-v">
+                <div class="v-flow"><div class="v-flow-arrow-up f4a"></div><div class="v-flow-line f4a"></div><div class="v-flow-num f4a">④a</div></div>
+            </div>
+            <div class="storage-card data-storage">
+                <div class="storage-header"><span class="storage-icon">💾</span><div><div class="storage-title gray">DATA STORAGE</div><div class="storage-subtitle">Persistence</div></div></div>
+                <div class="storage-boxes">
+                    <div class="storage-box table">
+                        <div class="storage-box-header"><span class="storage-box-icon">🗃️</span><div class="storage-box-title red">Table (BDD)</div></div>
+                        <div class="storage-tags"><span class="storage-tag red">Traces</span><span class="storage-tag red">Metrics</span><span class="storage-tag red">Scores</span></div>
+                        <div class="storage-flows"><span class="storage-flow f2">②←</span><span class="storage-flow f8b">⑧b←</span><span class="storage-flow f9">⑨←</span><span class="storage-flow f5a">⑤a→</span><span class="storage-flow f10">⑩→</span></div>
+                    </div>
+                    <div class="sync-connector"><span class="sync-icon">➡️</span><span class="sync-badge">③</span></div>
+                    <div class="storage-box object">
+                        <div class="storage-box-header"><span class="storage-box-icon">📦</span><div class="storage-box-title cyan">Object (JSON)</div></div>
+                        <div class="storage-tags"><span class="storage-tag cyan">Synced</span><span class="storage-tag cyan">Eval</span></div>
+                        <div class="storage-flows"><span class="storage-flow f3">③←</span><span class="storage-flow f4b">④b→</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
