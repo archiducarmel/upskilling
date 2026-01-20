@@ -1,238 +1,178 @@
-Excellente initiative de me montrer les specs originales. Cela permet une analyse comparative précise.
+test_preprocessing_transac.py => ALL GOOD !
+
+======
+
+test_preprocessing_safir_soc.py
 
 ---
 
-## Comparaison Specs vs Tests Implémentés
-
-### **Test 1 : `test_saisie_category_merge`**
-
-| Spec | Test Implémenté |
-|------|-----------------|
-| `i_uniq_kpi='E001'` (1 entreprise, 4 lignes) | `i_uniq_kpi=[1000004151300000, 3920010525200000]` (2 entreprises, 2 lignes) |
-| `category=['attri_blocage', 'atd_tres_pub', 'interets', 'turnover']` | `category=['attri_blocage', 'atd_tres_pub']` |
-| `nops_category=[1,2,1,1]` | `nops_category=[1, 2]` |
-
-**Verdict : ❌ NON CONFORME**
-
-Le test utilise **2 entreprises différentes** au lieu d'une seule. La somme `saisie__nops=3` est impossible car le `group_by("i_uniq_kpi")` sépare les données.
-
----
-
-### **Test 2 : `test_remb_sepa_max_threshold`**
-
-| Spec | Test Implémenté |
-|------|-----------------|
-| `i_uniq_kpi='E001','E002'` | `i_uniq_kpi=[1000004151300000, 3920010525200000]` |
-| `category='rembt_prlv_sepa'` pour les 2 | ✅ Correct |
-| `max_amount=[5000.0, 3000.0]` | ✅ Correct |
-
-**Verdict : ✅ CONFORME**
-
----
-
-### **Test 3 : `test_remb_sepa_max_exact_threshold`**
-
-| Spec | Test Implémenté |
-|------|-----------------|
-| `max_amount=3493.57007` | ✅ Correct |
-| Attendu : `remb_sepa_max='2'` | ✅ Correct |
-
-**Verdict : ✅ CONFORME**
-
----
-
-### **Test 4 : `test_net_int_turnover_double_condition`**
-
-| Spec | Test Implémenté |
-|------|-----------------|
-| E001: `interets=-100, turnover=50000, nops=70` | `interets=-200, turnover=100000, nops_total=70` sur 2 lignes |
-| E002: `interets=-100, turnover=50000, nops=50` | `interets=-100, turnover=50000, nops_total=50` sur 2 lignes |
-| E003: `interets=-10, turnover=50000, nops=70` | `interets=-10, turnover=50000, nops_total=70` sur 2 lignes |
-
-**Problème** : Le code calcule `nops = SUM(nops_total)` par entreprise. Avec 2 lignes par entreprise ayant `nops_total=70`, on obtient `nops=140`, pas `70`.
-
-**Verdict : ⚠️ PARTIELLEMENT CONFORME** - Le test passe mais pour les mauvaises raisons.
-
----
-
-### **Test 5 : `test_division_by_zero_turnover`**
-
-| Spec | Test Implémenté |
-|------|-----------------|
-| `1 entreprise E001` avec 2 transactions | `2 entreprises différentes` avec 1 transaction chacune |
-| `category='turnover' netamount=0` ET `category='interets' netamount=-100` | `interets` pour E1, `turnover` pour E2 |
-
-**Verdict : ❌ NON CONFORME - GRAVE**
-
-Le test **ne teste pas** la division par zéro. E001 a `interets` mais pas `turnover` (→ NULL). E002 a `turnover=0` mais pas `interets` (→ NULL). Aucune entreprise n'a les deux.
-
----
-
-### **Test 6 : `test_null_interets_and_turnover`**
-
-| Spec | Test Implémenté |
-|------|-----------------|
-| `1 ligne i_uniq_kpi='E001' category='prlv_sepa_retourne'` | ✅ Correct |
-| Attendu : `net_interets_sur_turnover=0.0`, `net_int_turnover='2'` | ✅ Correct |
-
-**Verdict : ✅ CONFORME**
-
----
-
-### **Test 7 : `test_null_vs_zero_nops_prlv_retourne`**
-
-| Spec | Test Implémenté |
-|------|-----------------|
-| E001 sans ligne `prlv_sepa_retourne` | E001 avec `category='turnover'` |
-| E002 avec `prlv_sepa_retourne__nops=0` | E002 avec `category='prlv_sepa_retourne', nops_category=0` |
-
-**Problème technique** :
-```python
-self.assertTrue(result.filter(...)["prlv_sepa_retourne__nops"][0] is None)
-```
-En Polars, `[0]` retourne la valeur Python, mais la comparaison `is None` peut être fragile.
-
-**Verdict : ⚠️ CONFORME MAIS FRAGILE**
-
----
-
-### **Test 8 : `test_non_model_categories_only`**
-
-| Spec | Test Implémenté |
-|------|-----------------|
-| Attendu : "toutes colonnes NULL" puis "remb_sepa_max='2'" | Vérifie `remb_sepa_max='2'` |
-
-**Problème GRAVE** : La spec dit `remb_sepa_max='2'` mais le code **ne fait pas ça**.
-
-Quand une entreprise est dans `df_main` mais **pas** dans `df_transac` (car toutes ses transactions sont filtrées), la jointure LEFT produit **NULL** pour toutes les colonnes transac, **pas '2'**.
-
-```python
-df_transac = donnees_transac_filtered.select("i_uniq_kpi").unique()  # VIDE si tout filtré
-# ...
-df_main = df_main.join(df_transac, on="i_uniq_kpi", how="left")  # Colonnes à NULL
-```
-
-**Verdict : ❌ SPEC INCORRECTE OU BUG DANS LE CODE**
-
-La spec attend `remb_sepa_max='2'` mais le code produit `NULL`. Il faut soit :
-1. Corriger la spec pour dire "colonnes à NULL"
-2. Corriger le code pour appliquer des valeurs par défaut après la jointure
-
----
-
-### **Test 9 : `test_aggregation_sum_not_max`**
-
-| Spec | Test Implémenté |
-|------|-----------------|
-| `3 lignes i_uniq_kpi='E001' category='interets__'` | `3 lignes i_uniq_kpi=1000004151300000 category='interets'` |
-| `netamount=[-100,-50,-25]`, `nops_category=[1,2,1]` | ✅ Correct |
-| Attendu : `interets__netamount=-175`, `interets__nops=4` | ✅ Correct |
-
-**Note** : La spec dit `category='interets__'` mais le code attend `category='interets'` (sans suffixe). Le test utilise correctement `'interets'`.
-
-**Verdict : ✅ CONFORME** (malgré l'erreur dans la spec)
-
----
-
-## Résumé
-
-| Test | Conformité | Action |
-|------|------------|--------|
-| 1. saisie_category_merge | ❌ | Réécrire avec 1 entreprise, 4 lignes |
-| 2. remb_sepa_max_threshold | ✅ | OK |
-| 3. remb_sepa_max_exact_threshold | ✅ | OK |
-| 4. net_int_turnover_double_condition | ⚠️ | Revoir le calcul de nops |
-| 5. division_by_zero_turnover | ❌ | Réécrire avec 1 entreprise, 2 lignes |
-| 6. null_interets_and_turnover | ✅ | OK |
-| 7. null_vs_zero_nops | ⚠️ | Vérifier syntaxe `is None` |
-| 8. non_model_categories_only | ❌ | Spec ou code à corriger |
-| 9. aggregation_sum_not_max | ✅ | OK |
-
-**Problèmes systémiques** :
-1. `print("aaaa", result)` dans le code
-2. Confusion récurrente entre "1 entreprise avec N transactions" vs "N entreprises avec 1 transaction"
-3. Incohérence spec/code sur le comportement avec catégories non-modèle
-
----
-Salut,
-
-J'ai analysé les tests unitaires de `preprocessing_transac.py` en les comparant aux specs. Y'a plusieurs problèmes, je te détaille ça :
-
----
-
-**1. `test_saisie_category_merge` → NOK**
+**1. `test_vb005_division_by_zero_servicedette` → NOK**
 
 Ce que la spec prévoit :
-- 1 entreprise (E001) avec 4 lignes de transactions
-- categories = `['attri_blocage', 'atd_tres_pub', 'interets', 'turnover']`
-- nops_category = `[1, 2, 1, 1]`
-- Résultat attendu : `saisie__nops = 3` (1+2 des deux catégories fusionnées)
+- Quand `servicedette = 0` (annuités d'emprunt nulles), division par zéro à gérer
+- `VB005` devrait être `0` ou `NULL`, pas `Inf`
+- Pas de crash
 
 Ce qui est implémenté :
-- 2 entreprises différentes (1000004151300000 et 3920010525200000)
-- 2 lignes seulement, une par entreprise
-- nops_category = `[1, 2]`
+- Le test vérifie `self.assertTrue(vb005 is None)`
+- Attend `None` comme résultat
 
-Pourquoi c'est faux : Le code fait un `group_by("i_uniq_kpi")`, donc chaque entreprise est traitée séparément. La somme 1+2=3 est impossible puisque les données sont sur 2 entreprises différentes. L'entreprise 1 aura `saisie__nops=1`, l'entreprise 2 aura `saisie__nops=2`. Le test passe peut-être par hasard mais il teste pas ce qu'il faut.
-
----
-
-**2. `test_division_by_zero_turnover` → NOK**
-
-Ce que la spec prévoit :
-- 1 entreprise (E001) avec 2 transactions
-- Une ligne `category='interets'` avec `netamount=-100`
-- Une ligne `category='turnover'` avec `netamount=0`
-- Résultat attendu : `net_interets_sur_turnover=0.0` (pas de division par zéro)
-
-Ce qui est implémenté :
-- 2 entreprises différentes (1000004151300000 et 3920010525200000)
-- Entreprise 1 a seulement `interets` (pas de turnover)
-- Entreprise 2 a seulement `turnover=0` (pas d'interets)
-
-Pourquoi c'est faux : Le test ne teste PAS la division par zéro. Après les jointures :
-- Entreprise 1 aura `interets__netamount=-100` et `turnover__netamount=NULL`
-- Entreprise 2 aura `interets__netamount=NULL` et `turnover__netamount=0`
-
-Aucune des deux n'a les deux valeurs en même temps. On teste le cas NULL, pas le cas division par zéro.
-
----
-
-**3. `test_non_model_categories_only` → NOK (et y'a un print qui traine)**
-
-Ce que la spec prévoit :
-- 1 entreprise avec uniquement des transactions `'agios'` et `'amort_pret'`
-- Ces catégories sont filtrées (pas utilisées par le modèle)
-- Résultat attendu : colonnes à NULL, puis `remb_sepa_max='2'`, etc.
-
-Ce qui est implémenté :
-- Le test vérifie `remb_sepa_max='2'`
-
-Pourquoi c'est faux : Quand toutes les transactions d'une entreprise sont filtrées, elle disparait de `df_transac`. La jointure LEFT avec `df_main` produit des NULL pour toutes les colonnes transac. Le code ne met PAS de valeur par défaut '2' après la jointure. Donc `remb_sepa_max` sera NULL, pas '2'.
-
-Soit la spec est fausse, soit y'a un bug dans le code. À clarifier.
-
-Aussi : y'a un `print("aaaa", result)` dans le test, à virer.
-
----
-
-**4. `test_net_int_turnover_double_condition` → À vérifier**
-
-Le test passe mais je suis pas sûr que ce soit pour les bonnes raisons. Le code calcule `nops = SUM(nops_total)` par entreprise. Dans le test, chaque entreprise a 2 lignes avec `nops_total=70` chacune, donc `nops=140` au final (pas 70). La condition `nops >= 60` est toujours vraie. Le test valide le bon comportement mais avec des données qui masquent un éventuel problème.
-
----
-
-**5. `test_null_vs_zero_nops_prlv_retourne` → Fragile**
-
-Le test utilise :
+Pourquoi c'est faux : Le code source fait :
 ```python
-self.assertTrue(result.filter(...)["prlv_sepa_retourne__nops"][0] is None)
+.when(pl.col("servicedette") == 0)
+.then(pl.lit("0"))  # ← String "0"
+...
+df_soc = df_soc.cast({"VB005": pl.Float64})  # ← Cast en 0.0
+```
+Quand `servicedette = 0`, le code retourne `"0"` (string) qui est ensuite casté en `0.0` (float). Le test attend `None` mais le code produit `0.0`. Le test va échouer.
+
+---
+
+**2. `test_vb035_vb055_division_by_zero_total_passif` → NOK**
+
+Ce que la spec prévoit :
+- Quand `mt_534` (total passif) = 0, division par zéro à gérer pour VB035 et VB055
+- Les deux ratios devraient être `0` ou `NULL`, pas `Inf`
+
+Ce qui est implémenté :
+- Le test vérifie `self.assertTrue(vb035 is None)` et `self.assertTrue(vb055 is None)`
+- Attend `None` pour les deux
+
+Pourquoi c'est faux : Même logique que ci-dessus. Le code source fait :
+```python
+.when(pl.col("totb") == 0)
+.then(pl.lit("0"))
+```
+Quand `totb = 0`, le code retourne `"0"` → casté en `0.0`. Le test attend `None` mais le code produit `0.0`. Le test va échouer.
+
+---
+
+**3. `test_unexpected_regime_fiscal` → PARTIELLEMENT NOK**
+
+Ce que la spec prévoit :
+- Quand `c_regme_fisc` a une valeur inattendue (ni "1" ni "2"), CAF = NULL
+- Les ratios financiers (VB005, VB035, VB055) sont aussi NULL ou valeurs par défaut
+
+Ce qui est implémenté :
+- Le test vérifie `self.assertIsNone(caf)` ✅
+- Le test vérifie `self.assertTrue(vb005 is None)` ❌
+
+Pourquoi c'est partiellement faux : 
+- La vérification de CAF est correcte : le code retourne bien `None` pour un régime fiscal inconnu via la clause `otherwise(None)`
+- Mais pour VB005, le code fait :
+```python
+.when(pl.col("CAF").is_null())
+.then(pl.lit("0"))
+```
+Si `CAF = None`, alors `VB005 = "0"` → casté en `0.0`. Le test attend `None` mais le code produit `0.0`.
+
+=======
+test_preprocessing_safir_conso.py
+
+**4. `test_vb023_division_by_zero_ca` → NOK**
+
+Ce que la spec prévoit :
+- Quand `ca_conso = 0` ou `NULL`, VB023 ne doit pas crasher
+- VB023 devrait être `NULL` (pas `Inf`)
+
+Ce qui est implémenté :
+- Le test attend `self.assertTrue(vb023 is None)`
+- Les données : `mt_310 = None`, `mt_309 = -1000000`, `mt_24 = 1000000`
+- ca_conso = (mt_24 + mt_309) / 12 × 12 = 0
+
+Pourquoi c'est faux : Le code source fait :
+```python
+df_conso = df_conso.with_columns(
+    [(pl.col("res_net_conso").cast(pl.Float64) / pl.col("ca_conso").cast(pl.Float64) * 100).alias("VB023")]
+)
 ```
 
-En Polars, la comparaison `is None` sur une valeur extraite peut être instable selon les versions. Mieux vaut utiliser `.is_null()[0]` ou vérifier autrement.
+**Il n'y a AUCUNE protection contre la division par zéro !** Quand `ca_conso = 0`, le code retourne `Inf` ou `NaN`, pas `None`. Le test attend `None` mais le code produit `Inf`.
+
+=========
+test_preprocessing_format_variables.py
+
+**1. `test_nature_juridique_encoding` → NOK**
+
+Ce que la spec prévoit :
+- `c_njur_prsne_enc='7'` → `nat_jur_a='>=7'`
+- Autres valeurs restent inchangées
+
+Ce qui est implémenté :
+- Données : `c_njur_prsne_enc = ["1", "5", "7"]`
+- Attendu : `nat_jur = ["1", "5", ">=7"]`
+
+Pourquoi c'est faux : Le code source (lignes 8-12) convertit uniquement "7" en ">=7", les autres valeurs passent telles quelles. **MAIS** le test utilise `"1"` et `"5"` comme valeurs. Or dans le contexte du modèle, `c_njur_prsne_enc` devrait contenir des valeurs comme `"1-3"`, `"4-6"`, `"7"`. Le test avec `"1"` et `"5"` ne correspond pas aux vraies valeurs métier (voir `setUp` qui utilise `"1-3"`).
+
+Le test passe techniquement mais ne teste pas les vraies valeurs métier attendues.
+
+**2. `test_reboot_score_null_handling` → NOK**
+
+Ce que la spec prévoit :
+- `reboot_score2 = NULL` → `reboot_score_char2 = NULL`
+
+Ce qui est implémenté :
+- Données : `reboot_score2 = [0.5, None]`
+- Attendu : `[classe valide, None]`
+
+Pourquoi c'est faux : Le code source (lignes 43-63) n'a **PAS** de clause `otherwise()` pour `reboot_score_char2`. Toutes les conditions utilisent des comparaisons numériques :
+```python
+.when(pl.col("reboot_score2") < 0.00142771716)
+...
+.when(pl.col("reboot_score2") > 0.0456250459)
+.then(pl.lit("9"))
+.alias("reboot_score_char2")  # PAS de .otherwise()
+```
+
+Si `reboot_score2 = NULL`, aucune condition ne match (les comparaisons avec NULL retournent NULL), donc `reboot_score_char2 = NULL`. **Le test est correct** mais il documente un comportement implicite, pas explicite.
+
+**Problème potentiel** : `0.5 > 0.0456250459` → classe '9'. Mais le test attend juste `assertIsNotNone(reboot_classes[0])`. C'est faible comme assertion.
+
+===========
+test_preprocessing_filters.py
+
+**3. `test_exclusion_creances_risquees` → NOK**
+
+Ce que la spec prévoit :
+- `c_crisq='0'` (sain), NULL conservés
+- `c_crisq='1'` (douteux), `'2'` (défaut) exclus
+
+Ce qui est implémenté :
+- Données : `c_crisq = ["0", "1", "2", None]`
+- Attendu : 2 entreprises conservées (0, NULL)
+
+Pourquoi c'est faux : Le code source (ligne 25) fait :
+```python
+df_main = df_main.filter(~pl.col("c_crisq").is_in(["1", "2"]))
+```
+
+Cette condition `~is_in(["1", "2"])` retourne `True` si la valeur n'est **PAS** dans ["1", "2"]. Pour `NULL`, le comportement de Polars est :
+- `NULL.is_in(["1", "2"])` → `NULL`
+- `~NULL` → `NULL`
+- Filtrage sur `NULL` → **ligne exclue**
+
+**Le test attend que NULL soit conservé mais le code va l'exclure.** Le test va échouer.
 
 ---
 
-En résumé, les tests 1, 2 et 8 sont à réécrire. Le problème récurrent c'est la confusion entre "1 entreprise avec plusieurs transactions" et "plusieurs entreprises avec 1 transaction chacune".
+**4. `test_profil_immobilier_null_handling` → NOK**
 
-Tu veux que je corrige les tests ?
+Ce que la spec prévoit :
+- `c_profl_immbr='1'` exclu
+- `c_profl_immbr='0'`, NULL, '' conservés
+- Attendu : 3 entreprises
+
+Ce qui est implémenté :
+- Données : `c_profl_immbr = ["1", "0", None, ""]`
+- Le code convertit NULL en "" puis filtre `!= "1"`
+
+Pourquoi c'est faux : Le `setUp` utilise `"c_profl_immbr": [2] * 10` (entiers), mais le test utilise `pl.Series("c_profl_immbr", ["1", "0", None, ""])` (strings).
+
+De plus, il y a d'autres filtres dans la fonction qui peuvent exclure des lignes :
+- Ligne 23 : `df_main.filter(pl.col("c_pres_cpt") == "1")` - `setUp` utilise `["1"] * 10` mais c'est un integer `[1] * 10`
+- Ligne 25 : `df_main.filter(~pl.col("c_crisq").is_in(["1", "2"]))` - `setUp` utilise `["3"] * 10` (OK)
+
+Les types de données (`int` vs `str`) peuvent causer des problèmes de comparaison.
+
+======
+test_postprocessing.py ==> ALL GOOD !
