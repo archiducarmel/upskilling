@@ -1,0 +1,1310 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Monitoring Architecture - v9 (12 Flows)</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', system-ui, sans-serif; 
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            min-height: 100vh;
+            padding: 15px;
+        }
+        
+        .container { max-width: 1400px; margin: 0 auto; }
+        
+        /* Header */
+        .header { text-align: center; margin-bottom: 12px; }
+        .badge { 
+            display: inline-block; background: #1e293b; color: #94a3b8; 
+            padding: 4px 12px; border-radius: 15px; font-size: 9px; 
+            letter-spacing: 1px; margin-bottom: 4px;
+        }
+        .title { font-size: 24px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
+        .version-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 700;
+            margin-left: 8px;
+        }
+        .subtitle { color: #64748b; font-size: 11px; }
+        
+        /* Sequence Banner */
+        .sequence-banner {
+            background: linear-gradient(90deg, #1e293b 0%, #334155 100%);
+            border-radius: 8px; padding: 10px 15px; margin-bottom: 15px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .sequence-title { color: #94a3b8; font-size: 10px; font-weight: 700; }
+        .sequence-flows { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+        .seq-group { display: flex; align-items: center; gap: 2px; padding: 3px 6px; border-radius: 4px; }
+        .seq-group.ingestion { background: rgba(244,63,94,0.2); }
+        .seq-group.batch { background: rgba(245,158,11,0.2); }
+        .seq-group.platform { background: rgba(16,185,129,0.2); }
+        .seq-group.viz { background: rgba(59,130,246,0.2); }
+        .seq-num {
+            width: 20px; height: 20px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 8px; font-weight: 700;
+        }
+        .seq-num.f1 { background: #f43f5e; }
+        .seq-num.f2 { background: #8b5cf6; }
+        .seq-num.f3 { background: #64748b; }
+        .seq-num.f4a { background: #f59e0b; }
+        .seq-num.f4b { background: #06b6d4; }
+        .seq-num.f4bp { background: #f43f5e; }
+        .seq-num.f5a { background: #06b6d4; }
+        .seq-num.f5b { background: #f59e0b; }
+        .seq-num.f8a { background: #10b981; }
+        .seq-num.f8b { background: #8b5cf6; }
+        .seq-num.f9 { background: #10b981; }
+        .seq-num.f10 { background: #3b82f6; }
+        .seq-arrow { color: #64748b; font-size: 10px; }
+        .seq-or { 
+            color: #fbbf24; 
+            font-size: 8px; 
+            font-weight: 700; 
+            padding: 1px 4px;
+            background: rgba(251,191,36,0.2);
+            border-radius: 3px;
+        }
+        
+        /* Main Grid */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 260px 50px 420px 50px 140px 30px 200px;
+            gap: 0;
+            align-items: start;
+        }
+        
+        /* Platform Cards */
+        .platform-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+        }
+        .platform-header {
+            padding: 10px 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .platform-header.dark { background: linear-gradient(135deg, #1e293b 0%, #334155 100%); }
+        .platform-header.blue { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); }
+        .platform-header.amber { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+        .platform-icon { font-size: 16px; }
+        .platform-title { font-size: 10px; font-weight: 700; color: white; }
+        .platform-subtitle { font-size: 7px; color: rgba(255,255,255,0.7); }
+        .platform-body { padding: 10px; }
+        
+        /* Section Labels */
+        .section-label {
+            font-size: 8px;
+            font-weight: 700;
+            padding: 4px 8px;
+            border-radius: 4px;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+        .section-label.gray { background: #f1f5f9; color: #475569; }
+        .section-label.amber { background: #fef3c7; color: #92400e; }
+        
+        /* UC Cards */
+        .uc-card {
+            border-radius: 6px;
+            padding: 6px 8px;
+            margin-bottom: 5px;
+            border: 2px solid;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .uc-card.yellow { border-color: #fbbf24; background: #fffbeb; }
+        .uc-card.green { border-color: #34d399; background: #ecfdf5; }
+        .uc-card.purple { border-color: #a78bfa; background: #f5f3ff; }
+        .uc-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .uc-dot.yellow { background: #fbbf24; }
+        .uc-dot.green { background: #34d399; }
+        .uc-dot.purple { background: #a78bfa; }
+        .uc-info { flex: 1; }
+        .uc-name { font-size: 8px; font-weight: 700; }
+        .uc-name.yellow { color: #92400e; }
+        .uc-name.green { color: #065f46; }
+        .uc-name.purple { color: #5b21b6; }
+        .uc-type { font-size: 6px; color: #64748b; }
+        .uc-file {
+            font-family: monospace;
+            font-size: 6px;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-weight: 600;
+        }
+        .uc-file.yellow { background: #fef3c7; color: #92400e; }
+        .uc-file.green { background: #d1fae5; color: #065f46; }
+        .uc-file.purple { background: #ede9fe; color: #5b21b6; }
+        
+        /* Flow Corridor */
+        .flow-corridor {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            padding: 15px 5px;
+            gap: 15px;
+        }
+        
+        /* Flow Item */
+        .flow-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+        }
+        .flow-num {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 9px;
+            font-weight: 700;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .flow-num.f1 { background: #f43f5e; }
+        .flow-num.f4a { background: #f59e0b; }
+        .flow-num.f5b { background: #f59e0b; }
+        .flow-num.f8a { background: #10b981; }
+        .flow-arrow {
+            font-size: 14px;
+            line-height: 1;
+        }
+        .flow-arrow.right { color: #f43f5e; }
+        .flow-arrow.left { color: #f59e0b; }
+        .flow-arrow.left-green { color: #10b981; }
+        .flow-label {
+            font-size: 7px;
+            color: #64748b;
+            font-weight: 600;
+        }
+        
+        /* Batch Monitor Box */
+        .batch-monitor {
+            background: #fffbeb;
+            border: 2px dashed #f59e0b;
+            border-radius: 8px;
+            padding: 8px;
+            margin-top: 10px;
+        }
+        .batch-monitor-title {
+            font-size: 8px;
+            font-weight: 700;
+            color: #92400e;
+            margin-bottom: 6px;
+        }
+        .batch-monitor-stats {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            margin-bottom: 6px;
+        }
+        .batch-stat {
+            background: #fef3c7;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-size: 7px;
+            color: #92400e;
+            font-weight: 600;
+        }
+        .batch-flows {
+            display: flex;
+            gap: 3px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .mini-badge {
+            font-size: 6px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            color: white;
+            font-weight: 700;
+        }
+        .mini-badge.f4a { background: #f59e0b; }
+        .mini-badge.f4b { background: #06b6d4; }
+        .mini-badge.f4bp { background: #f43f5e; }
+        .mini-badge.f8a { background: #10b981; }
+        .opt-badge {
+            font-size: 6px;
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-weight: 700;
+            color: white;
+        }
+        .opt-badge.a { background: #06b6d4; }
+        .opt-badge.b { background: #f43f5e; }
+        
+        /* Options Box */
+        .options-box {
+            margin-top: 10px;
+            border: 1px dashed #94a3b8;
+            border-radius: 6px;
+            padding: 8px;
+            background: #f8fafc;
+        }
+        .options-title {
+            font-size: 7px;
+            font-weight: 700;
+            color: #64748b;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+        .option-item {
+            border-radius: 5px;
+            padding: 6px 8px;
+            margin-bottom: 6px;
+        }
+        .option-item.a {
+            background: #ecfeff;
+            border: 1px solid #06b6d4;
+        }
+        .option-item.b {
+            background: #fef2f2;
+            border: 1px solid #f43f5e;
+        }
+        .option-header {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 3px;
+        }
+        .option-num {
+            font-size: 7px;
+            padding: 2px 5px;
+            border-radius: 3px;
+            color: white;
+            font-weight: 700;
+        }
+        .option-num.a { background: #06b6d4; }
+        .option-num.b { background: #f43f5e; }
+        .option-label {
+            font-size: 7px;
+            font-weight: 700;
+        }
+        .option-label.a { color: #0e7490; }
+        .option-label.b { color: #be123c; }
+        .option-desc {
+            font-size: 6px;
+            color: #64748b;
+        }
+        .option-or {
+            text-align: center;
+            font-size: 7px;
+            font-weight: 700;
+            color: #94a3b8;
+            padding: 2px 0;
+        }
+        
+        /* Observability Platform Layers */
+        .obs-layers {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .layer {
+            border-radius: 8px;
+            padding: 8px;
+        }
+        .layer.ingestion {
+            background: linear-gradient(135deg, #fef2f2, #fee2e2);
+            border: 1px solid #fecaca;
+        }
+        .layer.eval {
+            background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+            border: 1px solid #a7f3d0;
+        }
+        .layer.viz {
+            background: linear-gradient(135deg, #eff6ff, #dbeafe);
+            border: 1px solid #bfdbfe;
+        }
+        .layer-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 6px;
+        }
+        .layer-num {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 9px;
+            font-weight: 700;
+        }
+        .layer-num.red { background: #f43f5e; }
+        .layer-num.green { background: #10b981; }
+        .layer-num.blue { background: #3b82f6; }
+        .layer-title {
+            font-size: 8px;
+            font-weight: 700;
+        }
+        .layer-title.red { color: #dc2626; }
+        .layer-title.green { color: #059669; }
+        .layer-title.blue { color: #2563eb; }
+        .layer-desc {
+            font-size: 6px;
+            color: #64748b;
+        }
+        .component-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 5px;
+        }
+        .component {
+            background: white;
+            border-radius: 5px;
+            padding: 6px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .component-title {
+            font-size: 7px;
+            font-weight: 700;
+            margin-bottom: 3px;
+        }
+        .component-title.red { color: #dc2626; }
+        .component-title.green { color: #059669; }
+        .component-desc {
+            font-size: 6px;
+            color: #64748b;
+            margin-bottom: 3px;
+        }
+        .component-flows {
+            display: flex;
+            justify-content: center;
+            gap: 2px;
+            flex-wrap: wrap;
+        }
+        .flow-badge {
+            font-size: 5px;
+            padding: 1px 3px;
+            border-radius: 2px;
+            color: white;
+            font-weight: 700;
+        }
+        .flow-badge.f1 { background: #f43f5e; }
+        .flow-badge.f2 { background: #8b5cf6; }
+        .flow-badge.f3 { background: #64748b; }
+        .flow-badge.f4bp { background: #f43f5e; }
+        .flow-badge.f5a { background: #06b6d4; }
+        .flow-badge.f5b { background: #f59e0b; }
+        .flow-badge.f8a { background: #10b981; }
+        .flow-badge.f8b { background: #8b5cf6; }
+        .flow-badge.f9 { background: #10b981; }
+        .flow-badge.f10 { background: #3b82f6; }
+        
+        /* Dashboard Grid */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+        }
+        .dashboard {
+            background: white;
+            border-radius: 4px;
+            padding: 5px;
+            text-align: center;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        .dashboard-icon { font-size: 12px; }
+        .dashboard-title {
+            font-size: 6px;
+            color: #2563eb;
+            font-weight: 600;
+        }
+        
+        /* LLM Service */
+        .llm-body { padding: 8px; }
+        .llm-model {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid #fef3c7;
+        }
+        .llm-model:last-of-type { border-bottom: none; }
+        .llm-model-info {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .llm-model-icon { font-size: 12px; }
+        .llm-model-name {
+            font-size: 8px;
+            font-weight: 600;
+            color: #92400e;
+        }
+        .llm-model-type {
+            font-size: 6px;
+            color: #b45309;
+        }
+        .llm-endpoint {
+            font-family: monospace;
+            font-size: 6px;
+            padding: 2px 5px;
+            background: #fef3c7;
+            border-radius: 3px;
+            color: #92400e;
+        }
+        .llm-flow-box {
+            margin-top: 8px;
+            padding: 6px;
+            background: #fffbeb;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        
+        /* Legend */
+        .legend-panel {
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 10px;
+            border: 1px solid #e2e8f0;
+        }
+        .legend-title {
+            font-size: 9px;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+        .legend-section {
+            margin-bottom: 8px;
+        }
+        .legend-section-title {
+            font-size: 6px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-bottom: 4px;
+        }
+        .legend-section-title.ingestion { background: #fee2e2; color: #dc2626; }
+        .legend-section-title.batch { background: #fef3c7; color: #92400e; }
+        .legend-section-title.platform { background: #d1fae5; color: #065f46; }
+        .legend-section-title.viz { background: #dbeafe; color: #1d4ed8; }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin: 3px 0;
+        }
+        .legend-num {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 7px;
+            font-weight: 700;
+        }
+        .legend-num.f1 { background: #f43f5e; }
+        .legend-num.f2 { background: #8b5cf6; }
+        .legend-num.f3 { background: #64748b; }
+        .legend-num.f4a { background: #f59e0b; }
+        .legend-num.f4b { background: #06b6d4; }
+        .legend-num.f4bp { background: #f43f5e; }
+        .legend-num.f5a { background: #06b6d4; }
+        .legend-num.f5b { background: #f59e0b; }
+        .legend-num.f8a { background: #10b981; }
+        .legend-num.f8b { background: #8b5cf6; }
+        .legend-num.f9 { background: #10b981; }
+        .legend-num.f10 { background: #3b82f6; }
+        .legend-text {
+            font-size: 7px;
+            color: #475569;
+        }
+        .legend-opt {
+            font-size: 6px;
+            padding: 1px 4px;
+            border-radius: 3px;
+            color: white;
+            font-weight: 700;
+            margin-left: auto;
+        }
+        .legend-opt.a { background: #06b6d4; }
+        .legend-opt.b { background: #f43f5e; }
+        
+        /* Storage Section */
+        .storage-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 2px dashed #cbd5e1;
+        }
+        .storage-title {
+            text-align: center;
+            font-size: 9px;
+            font-weight: 700;
+            color: #64748b;
+            margin-bottom: 12px;
+        }
+        .storage-grid {
+            display: grid;
+            grid-template-columns: 260px 50px 730px;
+            gap: 0;
+            align-items: start;
+        }
+        
+        /* Reference Storage */
+        .ref-storage {
+            background: #fffbeb;
+            border: 2px dashed #f59e0b;
+            border-radius: 10px;
+            padding: 10px;
+        }
+        .ref-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+        .ref-icon { font-size: 16px; }
+        .ref-title {
+            font-size: 9px;
+            font-weight: 700;
+            color: #92400e;
+        }
+        .ref-badge {
+            margin-left: auto;
+            background: #f59e0b;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 7px;
+            font-weight: 700;
+        }
+        .ref-boxes {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+        }
+        .ref-box {
+            border-radius: 5px;
+            padding: 8px;
+            text-align: center;
+        }
+        .ref-box.yellow { background: white; border: 2px solid #fbbf24; }
+        .ref-box.green { background: white; border: 2px solid #34d399; }
+        .ref-box.purple { background: white; border: 2px solid #a78bfa; }
+        .ref-box-title {
+            font-size: 8px;
+            font-weight: 700;
+            margin-bottom: 3px;
+        }
+        .ref-box-title.yellow { color: #92400e; }
+        .ref-box-title.green { color: #065f46; }
+        .ref-box-title.purple { color: #5b21b6; }
+        .ref-box-desc {
+            font-size: 6px;
+            color: #64748b;
+        }
+        
+        /* Data Storage */
+        .data-storage {
+            background: white;
+            border: 2px solid #94a3b8;
+            border-radius: 10px;
+            padding: 10px;
+        }
+        .data-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+        .data-icon { font-size: 16px; }
+        .data-title {
+            font-size: 9px;
+            font-weight: 700;
+            color: #475569;
+        }
+        .data-boxes {
+            display: flex;
+            gap: 10px;
+            align-items: stretch;
+        }
+        .data-box {
+            flex: 1;
+            border-radius: 8px;
+            padding: 10px;
+        }
+        .data-box.table {
+            background: linear-gradient(135deg, #fff1f2, #fee2e2);
+            border: 2px solid #fb7185;
+        }
+        .data-box.object {
+            background: linear-gradient(135deg, #ecfeff, #cffafe);
+            border: 2px solid #22d3ee;
+        }
+        .data-box-header {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 6px;
+        }
+        .data-box-icon { font-size: 14px; }
+        .data-box-title {
+            font-size: 8px;
+            font-weight: 700;
+        }
+        .data-box-title.table { color: #be123c; }
+        .data-box-title.object { color: #0891b2; }
+        .data-box-tags {
+            display: flex;
+            gap: 3px;
+            flex-wrap: wrap;
+            margin-bottom: 6px;
+        }
+        .data-tag {
+            font-size: 6px;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+        .data-tag.table { background: #fee2e2; color: #be123c; }
+        .data-tag.object { background: #cffafe; color: #0891b2; }
+        .data-box-flows {
+            display: flex;
+            gap: 3px;
+            flex-wrap: wrap;
+            margin-bottom: 8px;
+        }
+        .data-flow {
+            font-size: 6px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            color: white;
+            font-weight: 700;
+        }
+        .data-flow.f2 { background: #8b5cf6; }
+        .data-flow.f3 { background: #64748b; }
+        .data-flow.f4b { background: #06b6d4; }
+        .data-flow.f4bp { background: #f43f5e; }
+        .data-flow.f5a { background: #06b6d4; }
+        .data-flow.f8b { background: #8b5cf6; }
+        .data-flow.f9 { background: #10b981; }
+        .data-flow.f10 { background: #3b82f6; }
+        
+        /* Option indicator in data box */
+        .data-option {
+            margin-top: 8px;
+            padding: 6px;
+            border-radius: 5px;
+            border: 1px dashed;
+        }
+        .data-option.a {
+            background: rgba(6,182,212,0.1);
+            border-color: #06b6d4;
+        }
+        .data-option.b {
+            background: rgba(244,63,94,0.1);
+            border-color: #f43f5e;
+        }
+        .data-option-header {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 3px;
+        }
+        .data-option-label {
+            font-size: 7px;
+            font-weight: 700;
+        }
+        .data-option-label.a { color: #0891b2; }
+        .data-option-label.b { color: #be123c; }
+        .data-option-desc {
+            font-size: 6px;
+            color: #64748b;
+        }
+        
+        /* Sync arrow */
+        .sync-arrow {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px 5px;
+        }
+        .sync-arrow-icon {
+            font-size: 20px;
+            color: #64748b;
+        }
+        .sync-arrow-badge {
+            font-size: 8px;
+            font-weight: 700;
+            color: #64748b;
+        }
+        
+        /* Options comparison */
+        .options-compare {
+            margin-top: 10px;
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        .compare-item {
+            flex: 1;
+            padding: 8px;
+            border-radius: 6px;
+        }
+        .compare-item.a {
+            background: #ecfeff;
+            border-left: 3px solid #06b6d4;
+        }
+        .compare-item.b {
+            background: #fef2f2;
+            border-left: 3px solid #f43f5e;
+        }
+        .compare-header {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 4px;
+        }
+        .compare-badge {
+            font-size: 7px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: white;
+            font-weight: 700;
+        }
+        .compare-badge.a { background: #06b6d4; }
+        .compare-badge.b { background: #f43f5e; }
+        .compare-title {
+            font-size: 8px;
+            font-weight: 700;
+        }
+        .compare-title.a { color: #0891b2; }
+        .compare-title.b { color: #be123c; }
+        .compare-desc {
+            font-size: 7px;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- HEADER -->
+        <div class="header">
+            <div class="badge">ARCHITECTURE TECHNIQUE</div>
+            <h1 class="title">AI Monitoring Platform <span class="version-badge">V9</span></h1>
+            <p class="subtitle">Architecture 12 Flux — Dual Query Options (④b / ④b')</p>
+        </div>
+        
+        <!-- SEQUENCE BANNER -->
+        <div class="sequence-banner">
+            <div class="sequence-title">🔄 SÉQUENCE DES FLUX</div>
+            <div class="sequence-flows">
+                <div class="seq-group ingestion">
+                    <div class="seq-num f1">①</div><span class="seq-arrow">→</span>
+                    <div class="seq-num f2">②</div><span class="seq-arrow">→</span>
+                    <div class="seq-num f3">③</div>
+                </div>
+                <span class="seq-arrow">|</span>
+                <div class="seq-group batch">
+                    <div class="seq-num f4a">④a</div><span class="seq-arrow">+</span>
+                    <div class="seq-num f4b">④b</div>
+                    <span class="seq-or">OU</span>
+                    <div class="seq-num f4bp">④b'</div>
+                    <span class="seq-arrow">→</span>
+                    <div class="seq-num f8a">⑧a</div><span class="seq-arrow">→</span>
+                    <div class="seq-num f8b">⑧b</div>
+                </div>
+                <span class="seq-arrow">|</span>
+                <div class="seq-group platform">
+                    <div class="seq-num f5a">⑤a</div><span class="seq-arrow">→</span>
+                    <div class="seq-num f5b">⑤b</div><span class="seq-arrow">→</span>
+                    <div class="seq-num f9">⑨</div>
+                </div>
+                <span class="seq-arrow">|</span>
+                <div class="seq-group viz">
+                    <div class="seq-num f10">⑩</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- MAIN GRID -->
+        <div class="main-grid">
+            <!-- INFERENCE PLATFORM -->
+            <div class="platform-card">
+                <div class="platform-header dark">
+                    <span class="platform-icon">⚡</span>
+                    <div>
+                        <div class="platform-title">INFERENCE PLATFORM</div>
+                        <div class="platform-subtitle">Models & Batch Jobs</div>
+                    </div>
+                </div>
+                <div class="platform-body">
+                    <div class="section-label gray">🎯 USE CASES</div>
+                    <div class="uc-card yellow">
+                        <div class="uc-dot yellow"></div>
+                        <div class="uc-info">
+                            <div class="uc-name yellow">Credit Scoring</div>
+                            <div class="uc-type">XGBoost • Batch</div>
+                        </div>
+                        <div class="uc-file yellow">flux_01</div>
+                    </div>
+                    <div class="uc-card green">
+                        <div class="uc-dot green"></div>
+                        <div class="uc-info">
+                            <div class="uc-name green">Toxicity</div>
+                            <div class="uc-type">DistilBERT • API</div>
+                        </div>
+                        <div class="uc-file green">flux_02</div>
+                    </div>
+                    <div class="uc-card purple">
+                        <div class="uc-dot purple"></div>
+                        <div class="uc-info">
+                            <div class="uc-name purple">RAG Assistant</div>
+                            <div class="uc-type">Mistral Medium + RAG</div>
+                        </div>
+                        <div class="uc-file purple">flux_03</div>
+                    </div>
+                    
+                    <!-- Batch Monitor -->
+                    <div class="batch-monitor">
+                        <div class="batch-monitor-title">📊 BATCH MONITOR — Drift Detection</div>
+                        <div class="batch-monitor-stats">
+                            <span class="batch-stat">PSI</span>
+                            <span class="batch-stat">KS</span>
+                            <span class="batch-stat">Chi²</span>
+                        </div>
+                        <div class="batch-flows">
+                            <span class="mini-badge f4a">←④a</span>
+                            <span class="mini-badge f4b">←④b</span>
+                            <span class="opt-badge a">A</span>
+                            <span class="mini-badge f4bp">←④b'</span>
+                            <span class="opt-badge b">B</span>
+                            <span class="mini-badge f8a">⑧a→</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Options Box -->
+                    <div class="options-box">
+                        <div class="options-title">📍 QUERY TRACES PRODUCTION</div>
+                        <div class="option-item a">
+                            <div class="option-header">
+                                <span class="option-num a">A</span>
+                                <span class="option-num a">④b</span>
+                                <span class="option-label a">Query S3</span>
+                            </div>
+                            <div class="option-desc">Object Storage (JSON files)</div>
+                        </div>
+                        <div class="option-or">──── OU ────</div>
+                        <div class="option-item b">
+                            <div class="option-header">
+                                <span class="option-num b">B</span>
+                                <span class="option-num b">④b'</span>
+                                <span class="option-label b">Query API</span>
+                            </div>
+                            <div class="option-desc">GET /observations (temps réel)</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- CORRIDOR 1 -->
+            <div class="flow-corridor">
+                <div class="flow-item">
+                    <div class="flow-num f1">①</div>
+                    <div class="flow-arrow right">→</div>
+                    <div class="flow-label">Push</div>
+                </div>
+                <div class="flow-item" style="margin-top: 30px;">
+                    <div class="flow-arrow left">←</div>
+                    <div class="flow-num f4a">④a</div>
+                    <div class="flow-label">Ref</div>
+                </div>
+                <div class="flow-item" style="margin-top: 30px;">
+                    <div class="flow-num f8a">⑧a</div>
+                    <div class="flow-arrow right">→</div>
+                    <div class="flow-label">Score</div>
+                </div>
+            </div>
+            
+            <!-- OBSERVABILITY PLATFORM -->
+            <div class="platform-card">
+                <div class="platform-header blue">
+                    <span class="platform-icon">🔭</span>
+                    <div>
+                        <div class="platform-title">MONITORING PLATFORM</div>
+                        <div class="platform-subtitle">Observability, Evaluation & Visualization</div>
+                    </div>
+                </div>
+                <div class="platform-body">
+                    <div class="obs-layers">
+                        <!-- Layer 1: Ingestion -->
+                        <div class="layer ingestion">
+                            <div class="layer-header">
+                                <div class="layer-num red">1</div>
+                                <div>
+                                    <div class="layer-title red">OBSERVABILITY</div>
+                                    <div class="layer-desc">Receive, Persist & Query</div>
+                                </div>
+                            </div>
+                            <div class="component-grid">
+                                <div class="component">
+                                    <div class="component-title red">🔌 API</div>
+                                    <div class="component-desc">POST /traces<br>GET /observations</div>
+                                    <div class="component-flows">
+                                        <span class="flow-badge f1">←①</span>
+                                        <span class="flow-badge f8a">←⑧a</span>
+                                        <span class="flow-badge f4bp">④b'→</span>
+                                    </div>
+                                </div>
+                                <div class="component">
+                                    <div class="component-title red">💾 Persist</div>
+                                    <div class="component-desc">Write-through</div>
+                                    <div class="component-flows">
+                                        <span class="flow-badge f2">②↓</span>
+                                        <span class="flow-badge f8b">⑧b↓</span>
+                                        <span class="flow-badge f9">⑨↓</span>
+                                    </div>
+                                </div>
+                                <div class="component">
+                                    <div class="component-title red">🔁 Sync</div>
+                                    <div class="component-desc">Table → Object</div>
+                                    <div class="component-flows">
+                                        <span class="flow-badge f3">③↓</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Layer 2: Evaluation -->
+                        <div class="layer eval">
+                            <div class="layer-header">
+                                <div class="layer-num green">2</div>
+                                <div>
+                                    <div class="layer-title green">EVALUATION</div>
+                                    <div class="layer-desc">Platform Side Quality</div>
+                                </div>
+                            </div>
+                            <div class="component-grid" style="grid-template-columns: 1fr;">
+                                <div class="component">
+                                    <div class="component-title green">🤖 LLM-as-Judge</div>
+                                    <div class="component-desc">AI scoring</div>
+                                    <div class="component-flows">
+                                        <span class="flow-badge f5a">←⑤a</span>
+                                        <span class="flow-badge f5b">⑤b→</span>
+                                        <span class="flow-badge f9">⑨→</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Layer 3: Visualization -->
+                        <div class="layer viz">
+                            <div class="layer-header">
+                                <div class="layer-num blue">3</div>
+                                <div>
+                                    <div class="layer-title blue">VISUALIZATION</div>
+                                    <div class="layer-desc">Dashboards & Alerts</div>
+                                </div>
+                            </div>
+                            <div class="dashboard-grid">
+                                <div class="dashboard">
+                                    <div class="dashboard-icon">📊</div>
+                                    <div class="dashboard-title">Perf</div>
+                                </div>
+                                <div class="dashboard">
+                                    <div class="dashboard-icon">📈</div>
+                                    <div class="dashboard-title">Drift</div>
+                                </div>
+                                <div class="dashboard">
+                                    <div class="dashboard-icon">✅</div>
+                                    <div class="dashboard-title">Quality</div>
+                                </div>
+                                <div class="dashboard">
+                                    <div class="dashboard-icon">🔔</div>
+                                    <div class="dashboard-title">Alerts</div>
+                                </div>
+                            </div>
+                            <div style="text-align: center; margin-top: 5px;">
+                                <span class="flow-badge f10">←⑩ Read</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- CORRIDOR 2 -->
+            <div class="flow-corridor">
+                <div class="flow-item" style="margin-top: 120px;">
+                    <div class="flow-num f5b">⑤b</div>
+                    <div class="flow-arrow right">→</div>
+                    <div class="flow-label">LLM</div>
+                </div>
+            </div>
+            
+            <!-- LLM SERVICE -->
+            <div class="platform-card">
+                <div class="platform-header amber">
+                    <span class="platform-icon">🤖</span>
+                    <div>
+                        <div class="platform-title">LLM SERVICE</div>
+                        <div class="platform-subtitle">LLM Models</div>
+                    </div>
+                </div>
+                <div class="llm-body">
+                    <div class="llm-model">
+                        <div class="llm-model-info">
+                            <span class="llm-model-icon">🌀</span>
+                            <div>
+                                <div class="llm-model-name">Mistral</div>
+                                <div class="llm-model-type">7B</div>
+                            </div>
+                        </div>
+                        <span class="llm-endpoint">/chat</span>
+                    </div>
+                    <div class="llm-model">
+                        <div class="llm-model-info">
+                            <span class="llm-model-icon">🦙</span>
+                            <div>
+                                <div class="llm-model-name">LLaMA</div>
+                                <div class="llm-model-type">OSS</div>
+                            </div>
+                        </div>
+                        <span class="llm-endpoint">/completions</span>
+                    </div>
+                    <div class="llm-model">
+                        <div class="llm-model-info">
+                            <span class="llm-model-icon">⚡</span>
+                            <div>
+                                <div class="llm-model-name">Custom</div>
+                                <div class="llm-model-type">FT</div>
+                            </div>
+                        </div>
+                        <span class="llm-endpoint">/inference</span>
+                    </div>
+                    <div class="llm-flow-box">
+                        <div class="flow-num f5b">⑤b</div>
+                        <span style="font-size: 8px; color: #92400e; font-weight: 600;">← Judge</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div></div>
+            
+            <!-- LEGEND -->
+            <div class="legend-panel">
+                <div class="legend-title">📍 12 FLOWS</div>
+                
+                <div class="legend-section">
+                    <div class="legend-section-title ingestion">INGESTION</div>
+                    <div class="legend-item">
+                        <div class="legend-num f1">①</div>
+                        <span class="legend-text">Telemetry</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-num f2">②</div>
+                        <span class="legend-text">Persist</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-num f3">③</div>
+                        <span class="legend-text">Sync</span>
+                    </div>
+                </div>
+                
+                <div class="legend-section">
+                    <div class="legend-section-title batch">BATCH SIDE</div>
+                    <div class="legend-item">
+                        <div class="legend-num f4a">④a</div>
+                        <span class="legend-text">Get Ref</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-num f4b">④b</div>
+                        <span class="legend-text">Query S3</span>
+                        <span class="legend-opt a">A</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-num f4bp">④b'</div>
+                        <span class="legend-text">Query API</span>
+                        <span class="legend-opt b">B</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-num f8a">⑧a</div>
+                        <span class="legend-text">Write</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-num f8b">⑧b</div>
+                        <span class="legend-text">Persist</span>
+                    </div>
+                </div>
+                
+                <div class="legend-section">
+                    <div class="legend-section-title platform">PLATFORM SIDE</div>
+                    <div class="legend-item">
+                        <div class="legend-num f5a">⑤a</div>
+                        <span class="legend-text">Read</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-num f5b">⑤b</div>
+                        <span class="legend-text">LLM Call</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-num f9">⑨</div>
+                        <span class="legend-text">Write</span>
+                    </div>
+                </div>
+                
+                <div class="legend-section">
+                    <div class="legend-section-title viz">VISUALIZATION</div>
+                    <div class="legend-item">
+                        <div class="legend-num f10">⑩</div>
+                        <span class="legend-text">Read</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- STORAGE SECTION -->
+        <div class="storage-section">
+            <div class="storage-title">💾 DATA STORAGE LAYER — Centralized Persistence</div>
+            
+            <div class="storage-grid">
+                <!-- Reference Storage -->
+                <div class="ref-storage">
+                    <div class="ref-header">
+                        <span class="ref-icon">📚</span>
+                        <span class="ref-title">REFERENCE STORAGE</span>
+                        <span class="ref-badge">④a ↑</span>
+                    </div>
+                    <div class="ref-boxes">
+                        <div class="ref-box yellow">
+                            <div class="ref-box-title yellow">UC X</div>
+                            <div class="ref-box-desc">Training</div>
+                        </div>
+                        <div class="ref-box green">
+                            <div class="ref-box-title green">UC Y</div>
+                            <div class="ref-box-desc">Training</div>
+                        </div>
+                        <div class="ref-box purple">
+                            <div class="ref-box-title purple">UC Z</div>
+                            <div class="ref-box-desc">Training</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Arrow -->
+                <div class="flow-corridor">
+                    <div class="flow-item">
+                        <div class="flow-arrow left">↑</div>
+                        <div class="flow-num f4a">④a</div>
+                    </div>
+                </div>
+                
+                <!-- Data Storage -->
+                <div class="data-storage">
+                    <div class="data-header">
+                        <span class="data-icon">💾</span>
+                        <span class="data-title">DATA STORAGE</span>
+                    </div>
+                    
+                    <div class="data-boxes">
+                        <!-- Table Storage -->
+                        <div class="data-box table">
+                            <div class="data-box-header">
+                                <span class="data-box-icon">🗃️</span>
+                                <span class="data-box-title table">Table Storage (BDD)</span>
+                            </div>
+                            <div class="data-box-tags">
+                                <span class="data-tag table">Traces</span>
+                                <span class="data-tag table">Metrics</span>
+                                <span class="data-tag table">Scores</span>
+                            </div>
+                            <div class="data-box-flows">
+                                <span class="data-flow f2">②←</span>
+                                <span class="data-flow f8b">⑧b←</span>
+                                <span class="data-flow f9">⑨←</span>
+                                <span class="data-flow f5a">⑤a→</span>
+                                <span class="data-flow f10">⑩→</span>
+                            </div>
+                            <!-- Option B -->
+                            <div class="data-option b">
+                                <div class="data-option-header">
+                                    <span class="data-flow f4bp">④b'→</span>
+                                    <span class="data-option-label b">OPTION B</span>
+                                </div>
+                                <div class="data-option-desc">GET /observations (API)</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Sync Arrow -->
+                        <div class="sync-arrow">
+                            <span class="sync-arrow-icon">➡️</span>
+                            <span class="sync-arrow-badge">③</span>
+                        </div>
+                        
+                        <!-- Object Storage -->
+                        <div class="data-box object">
+                            <div class="data-box-header">
+                                <span class="data-box-icon">📦</span>
+                                <span class="data-box-title object">Object Storage (JSON)</span>
+                            </div>
+                            <div class="data-box-tags">
+                                <span class="data-tag object">Synced</span>
+                                <span class="data-tag object">Observations</span>
+                            </div>
+                            <div class="data-box-flows">
+                                <span class="data-flow f3">③←</span>
+                            </div>
+                            <!-- Option A -->
+                            <div class="data-option a">
+                                <div class="data-option-header">
+                                    <span class="data-flow f4b">④b→</span>
+                                    <span class="data-option-label a">OPTION A</span>
+                                </div>
+                                <div class="data-option-desc">S3 JSON Files (Batch)</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Options comparison -->
+                    <div class="options-compare">
+                        <div class="compare-item a">
+                            <div class="compare-header">
+                                <span class="compare-badge a">A ④b</span>
+                                <span class="compare-title a">Object Storage</span>
+                            </div>
+                            <div class="compare-desc">Batch optimisé, coût réduit</div>
+                        </div>
+                        <div class="compare-item b">
+                            <div class="compare-header">
+                                <span class="compare-badge b">B ④b'</span>
+                                <span class="compare-title b">API /observations</span>
+                            </div>
+                            <div class="compare-desc">Temps réel, filtrage flexible</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
