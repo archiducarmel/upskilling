@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Flux ③ Sync</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; padding: 40px; display: flex; justify-content: center; align-items: center; }
+        .container { max-width: 950px; width: 100%; }
+        .header { text-align: center; margin-bottom: 35px; }
+        .flux-badge { display: inline-flex; align-items: center; gap: 12px; background: linear-gradient(135deg, #64748b 0%, #475569 100%); padding: 12px 28px; border-radius: 50px; margin-bottom: 15px; box-shadow: 0 10px 40px rgba(100,116,139,0.4); }
+        .flux-num { width: 44px; height: 44px; background: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; color: #64748b; }
+        .flux-name { font-size: 22px; font-weight: 700; color: white; letter-spacing: 2px; }
+        .title { font-size: 32px; font-weight: 700; color: white; margin-bottom: 8px; }
+        .subtitle { color: #94a3b8; font-size: 16px; font-weight: 500; }
+        .category { display: inline-block; margin-top: 15px; background: rgba(100,116,139,0.15); border: 1px solid rgba(100,116,139,0.3); color: #94a3b8; padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; letter-spacing: 1px; }
+        .flow-card { background: white; border-radius: 24px; padding: 50px; box-shadow: 0 25px 80px rgba(0,0,0,0.4); }
+        .flow-row { display: flex; align-items: center; justify-content: center; gap: 40px; }
+        .component { text-align: center; }
+        .comp-box { width: 260px; border-radius: 20px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.12); }
+        .comp-header { padding: 18px 20px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .comp-header.purple { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); }
+        .comp-header.cyan { background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); }
+        .comp-icon { font-size: 24px; }
+        .comp-title { font-size: 13px; font-weight: 700; color: white; letter-spacing: 0.5px; }
+        .comp-body { padding: 25px; background: #f8fafc; text-align: center; }
+        .storage-icon { font-size: 48px; display: block; margin-bottom: 12px; }
+        .storage-name { font-size: 16px; font-weight: 700; margin-bottom: 5px; }
+        .storage-name.purple { color: #5b21b6; }
+        .storage-name.cyan { color: #0891b2; }
+        .storage-type { font-size: 12px; color: #64748b; margin-bottom: 15px; }
+        .format-badge { display: inline-block; background: #ecfeff; color: #0891b2; padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid #a5f3fc; }
+        .schedule-box { margin-top: 15px; background: #f1f5f9; border-radius: 10px; padding: 12px; }
+        .schedule-label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; }
+        .schedule-value { font-size: 14px; font-weight: 700; color: #1e293b; margin-top: 4px; }
+        .arrow-zone { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .arrow-badge { background: linear-gradient(135deg, #64748b, #475569); color: white; padding: 8px 18px; border-radius: 20px; font-size: 13px; font-weight: 700; box-shadow: 0 4px 15px rgba(100,116,139,0.4); }
+        .arrow-line { display: flex; align-items: center; }
+        .arrow-shaft { width: 100px; height: 6px; background: linear-gradient(90deg, #64748b, #475569); border-radius: 3px; }
+        .arrow-head { width: 0; height: 0; border-top: 12px solid transparent; border-bottom: 12px solid transparent; border-left: 18px solid #475569; }
+        .arrow-label { font-size: 11px; color: #64748b; font-weight: 500; }
+        .description { margin-top: 35px; padding: 25px; background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border-radius: 16px; border-left: 5px solid #64748b; }
+        .desc-title { font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px; }
+        .desc-text { font-size: 15px; color: #1e293b; line-height: 1.7; }
+        .desc-text strong { color: #475569; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="flux-badge">
+                <div class="flux-num">③</div>
+                <span class="flux-name">SYNC</span>
+            </div>
+            <h1 class="title">Synchronisation vers Object Storage</h1>
+            <p class="subtitle">Table Storage → Object Storage (S3)</p>
+            <div class="category">📥 INGESTION</div>
+        </div>
+        
+        <div class="flow-card">
+            <div class="flow-row">
+                <div class="component">
+                    <div class="comp-box">
+                        <div class="comp-header purple">
+                            <span class="comp-icon">🗃️</span>
+                            <span class="comp-title">TABLE STORAGE</span>
+                        </div>
+                        <div class="comp-body">
+                            <span class="storage-icon"></span>
+                            <div class="storage-name purple">Base relationnelle</div>
+                            <div class="storage-type">Données structurées SQL</div>
+                            <div class="schedule-box">
+                                <div class="schedule-label">Tables synchronisées</div>
+                                <div class="schedule-value">traces, observations</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="arrow-zone">
+                    <div class="arrow-badge">③ Sync</div>
+                    <div class="arrow-line">
+                        <div class="arrow-shaft"></div>
+                        <div class="arrow-head"></div>
+                    </div>
+                    <div class="arrow-label">Export périodique</div>
+                </div>
+                
+                <div class="component">
+                    <div class="comp-box">
+                        <div class="comp-header cyan">
+                            <span class="comp-icon">📦</span>
+                            <span class="comp-title">OBJECT STORAGE</span>
+                        </div>
+                        <div class="comp-body">
+                            <span class="storage-icon">☁️</span>
+                            <div class="storage-name cyan">Stockage objet</div>
+                            <div class="storage-type">Stockage distribué</div>
+                            <div class="format-badge">JSON / Parquet</div>
+                            <div class="schedule-box">
+                                <div class="schedule-label">Fréquence</div>
+                                <div class="schedule-value">Journalier / Hebdo / Mensuel</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="description">
+                <div class="desc-title">📋 Description du flux</div>
+                <div class="desc-text">
+                    Export périodique des traces vers le stockage objet en JSON/Parquet. 
+                    Permet aux batchs de monitoring d'accéder aux traces de production <strong>sans charger la BDD principale</strong>, 
+                    considérée comme golden source que l'on ne veut pas compromettre.
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
