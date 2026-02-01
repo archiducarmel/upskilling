@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flux E2E - RAG Assistant Monitoring</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', system-ui, sans-serif; 
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            min-height: 100vh;
+            padding: 30px;
+            color: #f8fafc;
+        }
+        
+        .container { max-width: 1500px; margin: 0 auto; }
+        
+        /* Header */
+        .header { text-align: center; margin-bottom: 30px; }
+        .badge { 
+            display: inline-block; background: linear-gradient(135deg, #8b5cf6, #6366f1); color: #ffffff; 
+            padding: 6px 16px; border-radius: 20px; font-size: 11px; 
+            font-weight: 700; letter-spacing: 1px; margin-bottom: 10px;
+        }
+        .title { font-size: 28px; font-weight: 700; color: #f8fafc; margin-bottom: 8px; }
+        .subtitle { color: #94a3b8; font-size: 14px; }
+        .uc-tag {
+            display: inline-block;
+            background: rgba(139,92,246,0.2);
+            border: 1px solid #8b5cf6;
+            color: #a78bfa;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+        
+        /* Main Flow Container */
+        .flow-container {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 30px;
+        }
+        
+        /* Section Title */
+        .section-title {
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            padding: 10px 15px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .section-title.obs { background: linear-gradient(135deg, rgba(244,63,94,0.2), rgba(244,63,94,0.1)); color: #fb7185; border-left: 4px solid #f43f5e; }
+        .section-title.platform { background: linear-gradient(135deg, rgba(139,92,246,0.2), rgba(139,92,246,0.1)); color: #a78bfa; border-left: 4px solid #8b5cf6; }
+        .section-title.viz { background: linear-gradient(135deg, rgba(59,130,246,0.2), rgba(59,130,246,0.1)); color: #60a5fa; border-left: 4px solid #3b82f6; }
+        
+        .flow-section {
+            margin-bottom: 40px;
+        }
+        
+        /* Step Row */
+        .step-row {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            flex-wrap: wrap;
+        }
+        
+        /* Step Box */
+        .step-box {
+            background: rgba(255,255,255,0.05);
+            border: 2px solid;
+            border-radius: 12px;
+            padding: 16px 20px;
+            min-width: 200px;
+            max-width: 280px;
+            position: relative;
+        }
+        .step-box.model { border-color: #8b5cf6; background: rgba(139,92,246,0.1); }
+        .step-box.api { border-color: #f43f5e; background: rgba(244,63,94,0.1); }
+        .step-box.db { border-color: #8b5cf6; background: rgba(139,92,246,0.1); }
+        .step-box.object { border-color: #06b6d4; background: rgba(6,182,212,0.1); }
+        .step-box.llm { border-color: #10b981; background: rgba(16,185,129,0.1); min-width: 300px; max-width: 340px; }
+        .step-box.dash { border-color: #3b82f6; background: rgba(59,130,246,0.1); }
+        
+        .step-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .step-icon { font-size: 28px; }
+        .step-titles { flex: 1; }
+        .step-title { font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+        .step-title.model { color: #a78bfa; }
+        .step-title.api { color: #fb7185; }
+        .step-title.db { color: #a78bfa; }
+        .step-title.object { color: #22d3ee; }
+        .step-title.llm { color: #34d399; }
+        .step-title.dash { color: #60a5fa; }
+        .step-subtitle { font-size: 10px; color: #64748b; }
+        
+        .step-desc { 
+            font-size: 11px; 
+            color: #cbd5e1; 
+            line-height: 1.5; 
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .step-data {
+            padding: 10px 12px;
+            background: rgba(0,0,0,0.4);
+            border-radius: 8px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 10px;
+            color: #94a3b8;
+            line-height: 1.6;
+        }
+        .step-data .key { color: #60a5fa; }
+        .step-data .value { color: #34d399; }
+        .step-data .path { color: #fbbf24; }
+        .step-data .comment { color: #64748b; font-style: italic; }
+        .step-data .highlight { color: #f472b6; font-weight: 600; }
+        .step-data .query { color: #fbbf24; }
+        .step-data .response { color: #34d399; }
+        .step-data .context { color: #22d3ee; }
+        
+        /* Arrow */
+        .arrow {
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            flex-direction: column;
+        }
+        .arrow-container {
+            display: flex;
+            align-items: center;
+        }
+        .arrow-line {
+            width: 50px;
+            height: 4px;
+            border-radius: 2px;
+        }
+        .arrow-head {
+            width: 0;
+            height: 0;
+            border-top: 7px solid transparent;
+            border-bottom: 7px solid transparent;
+        }
+        .arrow-label {
+            font-size: 9px;
+            font-weight: 700;
+            margin-top: 5px;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+        .arrow.red .arrow-line { background: #f43f5e; }
+        .arrow.red .arrow-head { border-left: 12px solid #f43f5e; }
+        .arrow.red .arrow-label { background: rgba(244,63,94,0.3); color: #fb7185; }
+        .arrow.purple .arrow-line { background: #8b5cf6; }
+        .arrow.purple .arrow-head { border-left: 12px solid #8b5cf6; }
+        .arrow.purple .arrow-label { background: rgba(139,92,246,0.3); color: #a78bfa; }
+        .arrow.gray .arrow-line { background: #64748b; }
+        .arrow.gray .arrow-head { border-left: 12px solid #64748b; }
+        .arrow.gray .arrow-label { background: rgba(100,116,139,0.3); color: #94a3b8; }
+        .arrow.cyan .arrow-line { background: #06b6d4; }
+        .arrow.cyan .arrow-head { border-left: 12px solid #06b6d4; }
+        .arrow.cyan .arrow-label { background: rgba(6,182,212,0.3); color: #22d3ee; }
+        .arrow.green .arrow-line { background: #10b981; }
+        .arrow.green .arrow-head { border-left: 12px solid #10b981; }
+        .arrow.green .arrow-label { background: rgba(16,185,129,0.3); color: #34d399; }
+        .arrow.blue .arrow-line { background: #3b82f6; }
+        .arrow.blue .arrow-head { border-left: 12px solid #3b82f6; }
+        .arrow.blue .arrow-label { background: rgba(59,130,246,0.3); color: #60a5fa; }
+        .arrow.amber .arrow-line { background: #f59e0b; }
+        .arrow.amber .arrow-head { border-left: 12px solid #f59e0b; }
+        .arrow.amber .arrow-label { background: rgba(245,158,11,0.3); color: #fbbf24; }
+        
+        /* Flow Number Badge */
+        .flow-num {
+            position: absolute;
+            top: -12px;
+            right: -12px;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            color: white;
+            border: 3px solid #1e293b;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .flow-num.f1 { background: #f43f5e; }
+        .flow-num.f2 { background: #8b5cf6; }
+        .flow-num.f3 { background: #64748b; }
+        .flow-num.f5 { background: #06b6d4; }
+        .flow-num.f9 { background: #f59e0b; }
+        .flow-num.f10 { background: #3b82f6; }
+        
+        /* Platform section special layout */
+        .platform-layout {
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+        }
+        
+        /* Real-time badge */
+        .realtime-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 9px;
+            font-weight: 700;
+            margin-left: 10px;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        /* LLM Judge sections */
+        .llm-sections {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .llm-section-item {
+            background: rgba(0,0,0,0.3);
+            border-radius: 6px;
+            padding: 8px 10px;
+            border-left: 3px solid #10b981;
+        }
+        .llm-section-title {
+            font-size: 9px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            color: #34d399;
+        }
+        .llm-section-content {
+            font-size: 9px;
+            color: #94a3b8;
+            font-family: monospace;
+        }
+        
+        /* RAG Pipeline visualization */
+        .rag-pipeline {
+            background: rgba(139,92,246,0.1);
+            border: 1px solid #8b5cf6;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .rag-pipeline-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #a78bfa;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .rag-steps {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .rag-step {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 9px;
+            color: #cbd5e1;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .rag-step-num {
+            background: #8b5cf6;
+            color: white;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 8px;
+            font-weight: 700;
+        }
+        .rag-arrow {
+            color: #64748b;
+            font-size: 16px;
+        }
+        
+        /* Result box */
+        .result-box {
+            background: linear-gradient(135deg, rgba(16,185,129,0.1), rgba(59,130,246,0.1));
+            border: 2px solid #10b981;
+            border-radius: 16px;
+            padding: 25px;
+            margin-top: 30px;
+        }
+        .result-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .result-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #34d399;
+        }
+        .result-status {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .result-status.ok { background: rgba(16,185,129,0.3); color: #34d399; }
+        .result-status.warning { background: rgba(245,158,11,0.3); color: #fbbf24; }
+        .result-status.alert { background: rgba(244,63,94,0.3); color: #fb7185; }
+        
+        /* Metrics - Output only */
+        .metrics-section {
+            background: rgba(0,0,0,0.2);
+            border-radius: 12px;
+            padding: 15px;
+        }
+        .metrics-section-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .metrics-section-icon { font-size: 20px; }
+        .metrics-section-title { font-size: 13px; font-weight: 700; color: #c084fc; }
+        .metrics-section-desc { font-size: 10px; color: #64748b; }
+        
+        .result-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+        }
+        .metric-item {
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            padding: 12px;
+            border-left: 3px solid;
+        }
+        .metric-item.good { border-color: #10b981; }
+        .metric-item.warning { border-color: #f59e0b; }
+        .metric-item.alert { border-color: #f43f5e; }
+        .metric-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .metric-label { font-size: 9px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+        .metric-badge { font-size: 8px; padding: 2px 6px; border-radius: 4px; }
+        .metric-badge.good { background: rgba(16,185,129,0.3); color: #34d399; }
+        .metric-badge.warning { background: rgba(245,158,11,0.3); color: #fbbf24; }
+        .metric-badge.alert { background: rgba(244,63,94,0.3); color: #fb7185; }
+        .metric-value { font-size: 22px; font-weight: 700; }
+        .metric-value.good { color: #34d399; }
+        .metric-value.warning { color: #fbbf24; }
+        .metric-value.alert { color: #f43f5e; }
+        .metric-detail { font-size: 9px; color: #64748b; margin-top: 4px; }
+        
+        /* Legend */
+        .legend {
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(255,255,255,0.02);
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .legend-title { font-size: 12px; font-weight: 700; color: #94a3b8; margin-bottom: 15px; }
+        .legend-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+        }
+        .legend-item { 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            padding: 8px 12px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+        }
+        .legend-num {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 700;
+            color: white;
+        }
+        .legend-info { flex: 1; }
+        .legend-name { font-size: 11px; font-weight: 600; color: #f8fafc; }
+        .legend-desc { font-size: 9px; color: #64748b; }
+        .legend-note {
+            grid-column: 1 / -1;
+            padding: 12px 15px;
+            background: rgba(139,92,246,0.1);
+            border: 1px dashed #8b5cf6;
+            border-radius: 8px;
+            font-size: 10px;
+            color: #a78bfa;
+            margin-top: 10px;
+        }
+        .legend-note.important {
+            background: rgba(16,185,129,0.1);
+            border-color: #10b981;
+            color: #34d399;
+        }
+        
+        /* Comparison table */
+        .comparison-box {
+            grid-column: 1 / -1;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 10px;
+        }
+        .comparison-title {
+            font-size: 10px;
+            font-weight: 700;
+            color: #94a3b8;
+            margin-bottom: 10px;
+        }
+        .comparison-table {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+        }
+        .comparison-col {
+            background: rgba(255,255,255,0.03);
+            border-radius: 6px;
+            padding: 10px;
+        }
+        .comparison-col-title {
+            font-size: 9px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .comparison-col-title.tabular { color: #fbbf24; }
+        .comparison-col-title.nlp-pred { color: #f472b6; }
+        .comparison-col-title.nlp-gen { color: #a78bfa; }
+        .comparison-item {
+            font-size: 8px;
+            color: #94a3b8;
+            margin-bottom: 3px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .comparison-item .check { color: #34d399; }
+        .comparison-item .cross { color: #64748b; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="badge">🤖 MODÈLE NLP GÉNÉRATIF</div>
+            <h1 class="title">Flux E2E — Monitoring RAG Assistant</h1>
+            <p class="subtitle">Output Monitoring Only — LLM-as-Judge Evaluation (Platform Side)</p>
+            <div class="uc-tag">💬 UC: Assistant Virtuel Support Client — Mistral Medium + RAG (Elastic Search)</div>
+        </div>
+        
+        <div class="flow-container">
+            
+            <!-- RAG Pipeline Overview -->
+            <div class="rag-pipeline">
+                <div class="rag-pipeline-title">
+                    <span>🔄</span>
+                    <span>RAG PIPELINE — Étapes tracées à chaque inférence</span>
+                </div>
+                <div class="rag-steps">
+                    <div class="rag-step">
+                        <span class="rag-step-num">1</span>
+                        <span>User Query</span>
+                    </div>
+                    <span class="rag-arrow">→</span>
+                    <div class="rag-step">
+                        <span class="rag-step-num">2</span>
+                        <span>Embedding</span>
+                    </div>
+                    <span class="rag-arrow">→</span>
+                    <div class="rag-step">
+                        <span class="rag-step-num">3</span>
+                        <span>Vector Search</span>
+                    </div>
+                    <span class="rag-arrow">→</span>
+                    <div class="rag-step">
+                        <span class="rag-step-num">4</span>
+                        <span>Context Build</span>
+                    </div>
+                    <span class="rag-arrow">→</span>
+                    <div class="rag-step">
+                        <span class="rag-step-num">5</span>
+                        <span>LLM Generation</span>
+                    </div>
+                    <span class="rag-arrow">→</span>
+                    <div class="rag-step">
+                        <span class="rag-step-num">6</span>
+                        <span>Response</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ═══════════════════════════════════════════════════════════════ -->
+            <!-- PHASE 1: OBSERVABILITÉ -->
+            <!-- ═══════════════════════════════════════════════════════════════ -->
+            <div class="flow-section">
+                <div class="section-title obs">
+                    <span>📡</span>
+                    <span>PHASE 1 — OBSERVABILITÉ</span>
+                    <span style="font-size:10px; font-weight:400; color:#94a3b8;">Collecte des traces RAG complètes (query, context, response)</span>
+                </div>
+                
+                <div class="step-row">
+                    <!-- RAG Assistant -->
+                    <div class="step-box model" style="max-width: 300px;">
+                        <div class="step-header">
+                            <div class="step-icon">🤖</div>
+                            <div class="step-titles">
+                                <div class="step-title model">RAG Assistant</div>
+                                <div class="step-subtitle">Mistral Medium + Elastic Search • Production API</div>
+                            </div>
+                        </div>
+                        <div class="step-desc">
+                            Assistant virtuel support client avec retrieval augmenté. 
+                            Trace chaque étape du pipeline RAG.
+                        </div>
+                        <div class="step-data">
+                            <span class="comment"># User Query</span><br>
+                            <span class="query">"Comment résilier mon abonnement premium?"</span><br><br>
+                            <span class="comment"># Retrieved Context (3 chunks)</span><br>
+                            <span class="context">chunk_1: "Pour résilier, accédez à..."</span><br>
+                            <span class="context">chunk_2: "Le délai de résiliation est..."</span><br>
+                            <span class="context">chunk_3: "Remboursement pro-rata..."</span><br><br>
+                            <span class="comment"># Generated Response</span><br>
+                            <span class="response">"Pour résilier votre abonnement premium, suivez ces étapes: 1) Connectez-vous..."</span>
+                        </div>
+                    </div>
+                    
+                    <div class="arrow red">
+                        <div class="arrow-container">
+                            <div class="arrow-line"></div>
+                            <div class="arrow-head"></div>
+                        </div>
+                        <div class="arrow-label">①</div>
+                    </div>
+                    
+                    <!-- API Observabilité -->
+                    <div class="step-box api">
+                        <span class="flow-num f1">①</span>
+                        <div class="step-header">
+                            <div class="step-icon">🔌</div>
+                            <div class="step-titles">
+                                <div class="step-title api">API Observabilité</div>
+                                <div class="step-subtitle">POST /traces</div>
+                            </div>
+                        </div>
+                        <div class="step-desc">
+                            Reçoit la trace RAG complète avec query, contexte, et réponse générée.
+                        </div>
+                        <div class="step-data">
+                            <span class="comment"># Trace RAG payload</span><br>
+                            <span class="key">trace_id</span>: <span class="value">"rag-2024-xyz"</span><br>
+                            <span class="key">query</span>: <span class="value">"Comment résilier..."</span><br>
+                            <span class="key">chunks</span>: <span class="value">[{id, text, score}]</span><br>
+                            <span class="key">context_tokens</span>: <span class="value">1847</span><br>
+                            <span class="key">response</span>: <span class="value">"Pour résilier..."</span><br>
+                            <span class="key">latency_ms</span>: <span class="value">1243</span>
+                        </div>
+                    </div>
+                    
+                    <div class="arrow purple">
+                        <div class="arrow-container">
+                            <div class="arrow-line"></div>
+                            <div class="arrow-head"></div>
+                        </div>
+                        <div class="arrow-label">②</div>
+                    </div>
+                    
+                    <!-- Table Storage -->
+                    <div class="step-box db">
+                        <span class="flow-num f2">②</span>
+                        <div class="step-header">
+                            <div class="step-icon">🗃️</div>
+                            <div class="step-titles">
+                                <div class="step-title db">Table Storage</div>
+                                <div class="step-subtitle">PostgreSQL • Write optimized</div>
+                            </div>
+                        </div>
+                        <div class="step-desc">
+                            Persistance immédiate des traces RAG. Source pour l'évaluation temps réel.
+                        </div>
+                        <div class="step-data">
+                            <span class="comment"># Tables</span><br>
+                            <span class="key">rag_traces</span>: query, response<br>
+                            <span class="key">rag_contexts</span>: chunks, scores<br>
+                            <span class="key">rag_metrics</span>: latency, tokens<br>
+                            <span class="key">eval_scores</span>: LLM-as-Judge
+                        </div>
+                    </div>
+                    
+                    <div class="arrow gray">
+                        <div class="arrow-container">
+                            <div class="arrow-line"></div>
+                            <div class="arrow-head"></div>
+                        </div>
+                        <div class="arrow-label">③</div>
+                    </div>
+                    
+                    <!-- Object Storage (Archive) -->
+                    <div class="step-box object">
+                        <span class="flow-num f3">③</span>
+                        <div class="step-header">
+                            <div class="step-icon">📦</div>
+                            <div class="step-titles">
+                                <div class="step-title object">Object Storage</div>
+                                <div class="step-subtitle">S3 • Archive</div>
+                            </div>
+                        </div>
+                        <div class="step-desc">
+                            Archivage long terme des traces complètes pour audit et fine-tuning.
+                        </div>
+                        <div class="step-data">
+                            <span class="comment"># Bucket structure</span><br>
+                            <span class="path">s3://rag-traces/</span><br>
+                            <span class="path">└── assistant=support-v2/</span><br>
+                            <span class="path">&nbsp;&nbsp;&nbsp;&nbsp;└── dt=2024-01-18/</span><br>
+                            <span class="path">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── traces.jsonl</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ═══════════════════════════════════════════════════════════════ -->
+            <!-- PHASE 2: PLATFORM SIDE EVALUATION (LLM-as-Judge) -->
+            <!-- ═══════════════════════════════════════════════════════════════ -->
+            <div class="flow-section">
+                <div class="section-title platform">
+                    <span>🧠</span>
+                    <span>PHASE 2 — PLATFORM SIDE EVALUATION</span>
+                    <span style="font-size:10px; font-weight:400; color:#94a3b8;">LLM-as-Judge — Évaluation temps réel des réponses générées</span>
+                    <span class="realtime-badge">⚡ REAL-TIME</span>
+                </div>
+                
+                <div class="platform-layout">
+                    <!-- Table Storage (Source) -->
+                    <div class="step-box db" style="min-width: 180px; max-width: 200px;">
+                        <div class="step-header">
+                            <div class="step-icon">🗃️</div>
+                            <div class="step-titles">
+                                <div class="step-title db">Table Storage</div>
+                                <div class="step-subtitle">Pending Evaluation</div>
+                            </div>
+                        </div>
+                        <div class="step-desc">
+                            Traces en attente d'évaluation LLM-as-Judge.
+                        </div>
+                        <div class="step-data">
+                            <span class="comment"># Queue traces</span><br>
+                            <span class="key">status</span>: <span class="value">PENDING</span><br>
+                            <span class="key">priority</span>: <span class="value">HIGH</span>
+                        </div>
+                    </div>
+                    
+                    <div class="arrow cyan">
+                        <div class="arrow-container">
+                            <div class="arrow-line"></div>
+                            <div class="arrow-head"></div>
+                        </div>
+                        <div class="arrow-label">⑤a</div>
+                    </div>
+                    
+                    <!-- API Read -->
+                    <div class="step-box api" style="min-width: 180px; max-width: 200px;">
+                        <span class="flow-num f5">⑤a</span>
+                        <div class="step-header">
+                            <div class="step-icon">🔌</div>
+                            <div class="step-titles">
+                                <div class="step-title api">API Observabilité</div>
+                                <div class="step-subtitle">GET /traces/pending</div>
+                            </div>
+                        </div>
+                        <div class="step-desc">
+                            Récupère les traces à évaluer (query + context + response).
+                        </div>
+                        <div class="step-data">
+                            <span class="comment"># Read trace</span><br>
+                            <span class="key">trace_id</span><br>
+                            <span class="key">query</span><br>
+                            <span class="key">context</span><br>
+                            <span class="key">response</span>
+                        </div>
+                    </div>
+                    
+                    <div class="arrow green">
+                        <div class="arrow-container">
+                            <div class="arrow-line"></div>
+                            <div class="arrow-head"></div>
+                        </div>
+                        <div class="arrow-label">⑤b</div>
+                    </div>
+                    
+                    <!-- LLM-as-Judge -->
+                    <div class="step-box llm">
+                        <span class="flow-num f5" style="background:#10b981;">⑤b</span>
+                        <div class="step-header">
+                            <div class="step-icon">🧠</div>
+                            <div class="step-titles">
+                                <div class="step-title llm">LLM-as-Judge</div>
+                                <div class="step-subtitle">Mistral Medium • LLM Service</div>
+                            </div>
+                        </div>
+                        <div class="step-desc">
+                            Évalue la qualité de chaque réponse générée en temps réel. 
+                            Calcule les métriques RAG spécifiques via prompts structurés.
+                        </div>
+                        
+                        <div class="llm-sections">
+                            <div class="llm-section-item">
+                                <div class="llm-section-title">📤 OUTPUT MONITORING — RAG Quality Metrics</div>
+                                <div class="llm-section-content">
+                                    <span style="color:#34d399">Faithfulness</span>: réponse fidèle au contexte?<br>
+                                    <span style="color:#34d399">Hallucination</span>: info inventée détectée?<br>
+                                    <span style="color:#34d399">Answer Relevance</span>: répond à la question?<br>
+                                    <span style="color:#34d399">Context Relevance</span>: chunks pertinents?<br>
+                                    <span style="color:#34d399">Completeness</span>: réponse complète?<br>
+                                    <span style="color:#34d399">Coherence</span>: réponse cohérente?
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="arrow amber">
+                        <div class="arrow-container">
+                            <div class="arrow-line"></div>
+                            <div class="arrow-head"></div>
+                        </div>
+                        <div class="arrow-label">⑨</div>
+                    </div>
+                    
+                    <!-- API Write Scores -->
+                    <div class="step-box api">
+                        <span class="flow-num f9">⑨</span>
+                        <div class="step-header">
+                            <div class="step-icon">🔌</div>
+                            <div class="step-titles">
+                                <div class="step-title api">API Observabilité</div>
+                                <div class="step-subtitle">POST /scores</div>
+                            </div>
+                        </div>
+                        <div class="step-desc">
+                            Persiste les scores LLM-as-Judge calculés pour chaque trace.
+                        </div>
+                        <div class="step-data">
+                            <span class="comment"># Evaluation scores</span><br>
+                            <span class="key">faithfulness</span>: <span class="value">0.92</span><br>
+                            <span class="key">hallucination</span>: <span class="value">0.05</span><br>
+                            <span class="key">relevance</span>: <span class="value">0.88</span><br>
+                            <span class="key">completeness</span>: <span class="value">0.85</span><br>
+                            <span class="key">coherence</span>: <span class="value">0.94</span>
+                        </div>
+                    </div>
+                    
+                    <div class="arrow purple">
+                        <div class="arrow-container">
+                            <div class="arrow-line"></div>
+                            <div class="arrow-head"></div>
+                        </div>
+                        <div class="arrow-label">②</div>
+                    </div>
+                    
+                    <!-- Table Storage Persist -->
+                    <div class="step-box db" style="min-width: 140px; max-width: 160px;">
+                        <div class="step-header">
+                            <div class="step-icon">🗃️</div>
+                            <div class="step-titles">
+                                <div class="step-title db">Table Storage</div>
+                                <div class="step-subtitle">Persist Scores</div>
+                            </div>
+                        </div>
+                        <div class="step-desc">
+                            Stockage des scores pour dashboards.
+                        </div>
+                        <div class="step-data">
+                            <span class="key">eval_scores</span><br>
+                            <span class="key">rag_quality</span><br>
+                            <span class="key">alerts</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ═══════════════════════════════════════════════════════════════ -->
+            <!-- PHASE 3: VISUALIZATION -->
+            <!-- ═══════════════════════════════════════════════════════════════ -->
+            <div class="flow-section">
+                <div class="section-title viz">
+                    <span>📈</span>
+                    <span>PHASE 3 — VISUALIZATION</span>
+                    <span style="font-size:10px; font-weight:400; color:#94a3b8;">Dashboards RAG Quality Monitoring</span>
+                </div>
+                
+                <div class="step-row">
+                    <!-- Table Storage -->
+                    <div class="step-box db">
+                        <div class="step-header">
+                            <div class="step-icon">🗃️</div>
+                            <div class="step-titles">
+                                <div class="step-title db">Table Storage</div>
+                                <div class="step-subtitle">All RAG Metrics</div>
+                            </div>
+                        </div>
+                        <div class="step-desc">
+                            Source unique avec scores LLM-as-Judge et métriques opérationnelles.
+                        </div>
+                    </div>
+                    
+                    <div class="arrow blue">
+                        <div class="arrow-container">
+                            <div class="arrow-line"></div>
+                            <div class="arrow-head"></div>
+                        </div>
+                        <div class="arrow-label">⑩</div>
+                    </div>
+                    
+                    <!-- Dashboard -->
+                    <div class="step-box dash" style="min-width: 420px; max-width: 480px;">
+                        <span class="flow-num f10">⑩</span>
+                        <div class="step-header">
+                            <div class="step-icon">📈</div>
+                            <div class="step-titles">
+                                <div class="step-title dash">Dashboards RAG Monitoring</div>
+                                <div class="step-subtitle">Real-time • Grafana / Custom</div>
+                            </div>
+                        </div>
+                        <div class="step-desc">
+                            Visualisation temps réel des métriques de qualité RAG avec alertes automatiques sur les hallucinations.
+                        </div>
+                        <div class="step-data">
+                            <span class="comment"># RAG Quality Dashboards (Output Only)</span><br>
+                            <span class="key">📤 Faithfulness Score</span>: % fidèle au contexte<br>
+                            <span class="key">📤 Hallucination Rate</span>: % réponses hallucinated<br>
+                            <span class="key">📤 Answer Relevance</span>: pertinence réponses<br>
+                            <span class="key">📤 Context Utilization</span>: % chunks utilisés<br>
+                            <span class="key">📤 Low Confidence</span>: réponses incertaines<br><br>
+                            <span class="comment"># Operational Dashboards</span><br>
+                            <span class="key">⚡ Latency P95</span>: temps de réponse<br>
+                            <span class="key">📊 Token Usage</span>: consommation LLM
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ═══════════════════════════════════════════════════════════════ -->
+            <!-- RESULT METRICS (OUTPUT ONLY) -->
+            <!-- ═══════════════════════════════════════════════════════════════ -->
+            <div class="result-box">
+                <div class="result-header">
+                    <div class="result-title">📊 Monitoring RAG Assistant — Métriques LLM-as-Judge Temps Réel</div>
+                    <div class="result-status warning">⚠️ 1 ALERTE HALLUCINATION</div>
+                </div>
+                
+                <!-- OUTPUT MONITORING ONLY -->
+                <div class="metrics-section">
+                    <div class="metrics-section-header">
+                        <div class="metrics-section-icon">📤</div>
+                        <div>
+                            <div class="metrics-section-title">OUTPUT MONITORING — RAG Quality (LLM-as-Judge)</div>
+                            <div class="metrics-section-desc">Évaluation temps réel de la qualité des réponses générées par le RAG</div>
+                        </div>
+                    </div>
+                    <div class="result-metrics">
+                        <div class="metric-item good">
+                            <div class="metric-header">
+                                <div class="metric-label">Faithfulness</div>
+                                <div class="metric-badge good">OK</div>
+                            </div>
+                            <div class="metric-value good">92%</div>
+                            <div class="metric-detail">Réponses fidèles au contexte • Seuil: 85%</div>
+                        </div>
+                        <div class="metric-item warning">
+                            <div class="metric-header">
+                                <div class="metric-label">Hallucination Rate</div>
+                                <div class="metric-badge warning">WATCH</div>
+                            </div>
+                            <div class="metric-value warning">8.2%</div>
+                            <div class="metric-detail">Seuil: 5% • +2% vs baseline ⚠️</div>
+                        </div>
+                        <div class="metric-item good">
+                            <div class="metric-header">
+                                <div class="metric-label">Answer Relevance</div>
+                                <div class="metric-badge good">OK</div>
+                            </div>
+                            <div class="metric-value good">88%</div>
+                            <div class="metric-detail">Réponses pertinentes à la question</div>
+                        </div>
+                        <div class="metric-item good">
+                            <div class="metric-header">
+                                <div class="metric-label">Context Relevance</div>
+                                <div class="metric-badge good">OK</div>
+                            </div>
+                            <div class="metric-value good">91%</div>
+                            <div class="metric-detail">Chunks retrievés pertinents</div>
+                        </div>
+                        <div class="metric-item good">
+                            <div class="metric-header">
+                                <div class="metric-label">Completeness</div>
+                                <div class="metric-badge good">OK</div>
+                            </div>
+                            <div class="metric-value good">85%</div>
+                            <div class="metric-detail">Réponses couvrant tous les aspects</div>
+                        </div>
+                        <div class="metric-item good">
+                            <div class="metric-header">
+                                <div class="metric-label">Coherence</div>
+                                <div class="metric-badge good">OK</div>
+                            </div>
+                            <div class="metric-value good">94%</div>
+                            <div class="metric-detail">Réponses logiques et fluides</div>
+                        </div>
+                        <div class="metric-item warning">
+                            <div class="metric-header">
+                                <div class="metric-label">Low Confidence</div>
+                                <div class="metric-badge warning">WATCH</div>
+                            </div>
+                            <div class="metric-value warning">12%</div>
+                            <div class="metric-detail">Réponses avec confiance < 0.7</div>
+                        </div>
+                        <div class="metric-item good">
+                            <div class="metric-header">
+                                <div class="metric-label">Latency P95</div>
+                                <div class="metric-badge good">OK</div>
+                            </div>
+                            <div class="metric-value good">1.8s</div>
+                            <div class="metric-detail">SLA: 3s • Performance OK</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- LEGEND -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <div class="legend">
+            <div class="legend-title">📍 FLUX UTILISÉS — Output Monitoring RAG (LLM-as-Judge Platform Side)</div>
+            <div class="legend-grid">
+                <div class="legend-item">
+                    <div class="legend-num" style="background:#f43f5e">①</div>
+                    <div class="legend-info">
+                        <div class="legend-name">Telemetry</div>
+                        <div class="legend-desc">Push traces RAG complètes vers API</div>
+                    </div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-num" style="background:#8b5cf6">②</div>
+                    <div class="legend-info">
+                        <div class="legend-name">Persist</div>
+                        <div class="legend-desc">Écriture synchrone en Table Storage</div>
+                    </div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-num" style="background:#64748b">③</div>
+                    <div class="legend-info">
+                        <div class="legend-name">Sync</div>
+                        <div class="legend-desc">Archivage long terme vers S3</div>
+                    </div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-num" style="background:#06b6d4">⑤a</div>
+                    <div class="legend-info">
+                        <div class="legend-name">Read</div>
+                        <div class="legend-desc">Lecture trace pour évaluation</div>
+                    </div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-num" style="background:#10b981">⑤b</div>
+                    <div class="legend-info">
+                        <div class="legend-name">LLM Call</div>
+                        <div class="legend-desc">Appel LLM-as-Judge</div>
+                    </div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-num" style="background:#f59e0b">⑨</div>
+                    <div class="legend-info">
+                        <div class="legend-name">Write</div>
+                        <div class="legend-desc">Persistance scores évaluation</div>
+                    </div>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-num" style="background:#3b82f6">⑩</div>
+                    <div class="legend-info">
+                        <div class="legend-name">Read</div>
+                        <div class="legend-desc">Alimentation dashboards</div>
+                    </div>
+                </div>
+                
+                <!-- Important notes -->
+                <div class="legend-note important">
+                    ⚡ <strong>TEMPS RÉEL:</strong> Contrairement aux modèles prédictifs (tabulaire, NLP classification), les modèles génératifs sont évalués <strong>au fil de l'eau</strong> par LLM-as-Judge. Chaque réponse est évaluée individuellement dès sa génération — pas de batch processing.
+                </div>
+                
+                <div class="legend-note">
+                    ℹ️ <strong>Flux non utilisés:</strong> ④a Get Ref, ④b/④b' Query, ⑧a/⑧b Write — Réservés au <strong>Batch Side Evaluation</strong> pour les modèles prédictifs (tabulaire, NLP classification). Les modèles génératifs n'ont <strong>pas besoin d'Input Monitoring</strong> ni de <strong>Batch Monitor</strong>.
+                </div>
+                
+                <!-- Comparison table -->
+                <div class="comparison-box">
+                    <div class="comparison-title">📊 COMPARAISON DES APPROCHES D'ÉVALUATION</div>
+                    <div class="comparison-table">
+                        <div class="comparison-col">
+                            <div class="comparison-col-title tabular">📊 TABULAIRE (Credit Scoring)</div>
+                            <div class="comparison-item"><span class="check">✓</span> Input Monitoring (Feature Drift)</div>
+                            <div class="comparison-item"><span class="check">✓</span> Output Monitoring (Prediction Drift)</div>
+                            <div class="comparison-item"><span class="check">✓</span> Batch Side Evaluation</div>
+                            <div class="comparison-item"><span class="cross">✗</span> Platform Side (LLM-as-Judge)</div>
+                            <div class="comparison-item"><span class="check">✓</span> Reference Dataset requis</div>
+                        </div>
+                        <div class="comparison-col">
+                            <div class="comparison-col-title nlp-pred">🧠 NLP PRÉDICTIF (Toxicity)</div>
+                            <div class="comparison-item"><span class="check">✓</span> Input Monitoring (Text Drift)</div>
+                            <div class="comparison-item"><span class="check">✓</span> Output Monitoring (Prediction Drift)</div>
+                            <div class="comparison-item"><span class="check">✓</span> Batch Side Evaluation</div>
+                            <div class="comparison-item"><span class="cross">✗</span> Platform Side (LLM-as-Judge)</div>
+                            <div class="comparison-item"><span class="check">✓</span> Reference Corpus requis</div>
+                        </div>
+                        <div class="comparison-col">
+                            <div class="comparison-col-title nlp-gen">🤖 NLP GÉNÉRATIF (RAG)</div>
+                            <div class="comparison-item"><span class="cross">✗</span> Input Monitoring</div>
+                            <div class="comparison-item"><span class="check">✓</span> Output Monitoring (RAG Quality)</div>
+                            <div class="comparison-item"><span class="cross">✗</span> Batch Side Evaluation</div>
+                            <div class="comparison-item"><span class="check">✓</span> Platform Side (LLM-as-Judge)</div>
+                            <div class="comparison-item"><span class="cross">✗</span> Reference Dataset</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
